@@ -1,0 +1,331 @@
+import logging
+
+class CMU_Dictionary():
+	CONSONANTS = ['B', 'CH', 'D', 'DH','F', 'G', 'HH', 'JH', 'K', 'L', 'M', 'N', 'NG', 'P', 'R', 'S', 'SH', 'T', 'TH', 'V', 'W', 'Y', 'Z', 'ZH']
+	VOWELS = ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 'IH', 'IY', 'OW', 'OY', 'UH', 'UW']
+	DICT_ADDITIONS = "added_dict_entries.txt"               ## file for collecting uploaded additions to the dictionary
+
+	def __init__(self, dictionary_file, verbose=False, prompt=False):
+		"""
+		Initializes object by reading in CMU dictionary (or similar)
+
+		@param string dictionary_file
+		@param bool verbose: Whether to print debug information
+		@param bool prompt: Whether to prompt the user to fix errors
+		@author Keelan Evanini
+		@author Christian Brickhouse
+		"""
+		self.verbose = verbose
+		self.prompt = prompt
+
+		self.logger = logging.getLogger(__name__)
+		slef.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+
+		self.cmu_dict = self.read(dictionary_file)
+		## check that cmudict has entries
+	    if len(self.cmu_dict) == 0:
+			self.logger.warning('Dictionary %s is empty' % dictionary_file)
+	    if verbose:
+	        self.logger.debug("Read dictionary from file %s" % dictionary_file)
+
+	def read(self,dictionary_file):
+		"""
+		@author Keelan Evanini
+		"""
+		cmu_dict = {}
+		pat = re.compile('  *')                ## two spaces separating CMU dict entries
+		with open(dictionary_file,'r') as cmu_dict_file:
+			for line in cmu_dict_file.readlines():
+				line = line.rstrip()
+		        line = re.sub(pat, ' ', line)      ## reduce all spaces to one
+		        word = line.split(' ')[0]          ## orthographic transcription
+		        phones = line.split(' ')[1:]       ## phonemic transcription
+		        if word not in cmu_dict:
+		            cmu_dict[word] = [phones]       ## phonemic transcriptions represented as list of lists of phones
+		        else:
+		            if phones not in cmu_dict[word]:
+		                cmu_dict[word].append(phones)   ## add alternative pronunciation to list of pronunciations
+		return cmu_dict
+
+	def add_dictionary_entries(self, infile, path='.'):
+	    """
+		Reads additional dictionary entries from file and adds them to the CMU dictionary
+
+		@param string infile
+		@param string path
+		@raises IndexError
+		"""
+
+		cmu_dict = self.cmu_dict
+		add_dict = {}
+
+		with open(infile,'r') as f:
+			lines = f.readlines()
+
+	    ## process entries
+	    for line in lines:
+	        try:
+				columns = line.strip().split('\t')
+	            word = columns[0].upper()
+	            transcriptions = [check_transcription(t.strip()) for t in columns[1].replace('"', '').split(',')]
+				if len(transcriptions) == 0:
+					continue
+	        except IndexError as err:
+	            self.logger.error("Incorrect format of dictionary input file %s:  Problem with line \"%s\"." % (infile, line))
+				raise ValueError('Incorrect dictionary input file') from err
+	        ## add new entry to CMU dictionary
+	        if word not in cmu_dict:
+	            cmudict[word] = transcriptions
+	            add_dict[word] = transcriptions
+	        else:   ## word might be in dict but transcriber might want to add alternative pronunciation
+	            for t in trans:
+	                if t not in cmudict[word]:  ## check that new transcription is not already in dictionary
+	                    cmudict[word].append(t)
+					if word not in add_dict:
+						add_dict = []
+					if t not in add_dict[word]:
+                    	add_dict[word].append(t)
+
+	    if self.verbose:
+	        self.logger.debug("Added all entries in file %s to CMU dictionary." % os.path.basename(infile))
+
+	    ## add new entries to the file for additional transcription entries
+	    ## (merge with the existing DICT_ADDITIONS file to avoid duplicates)
+		added_items_file = os.path.join(path,self.DICT_ADDITIONS)
+	    if os.path.exists(added_items_file):  ## check whether dictionary additions file exists already
+	        added_already = self.read(added_items_file)
+	        new_dict = self.merge_dicts(added_already, add_dict)
+	    else:
+	        new_dict = add_dict
+	    write_dict(added_items_file, dictionary=new_dict, mode='w')
+	    if self.verbose:
+	        self.logger.debug("Added new entries from file %s to file %s." % (os.path.basename(infile), DICT_ADDITIONS))
+
+	def check_transcription(self, transcription):
+	    """checks that the transcription entered for a word conforms to the Arpabet style"""
+	    ## INPUT:  string w = phonetic transcription of a word (phones should be separated by spaces)
+	    ## OUTPUT:  list final_trans = list of individual phones (upper case, checked for correct format)
+
+	    ## convert to upper case and split into phones
+	    phones = transcription.upper().split()
+
+	    ## check that phones are separated by spaces
+	    ## (len(w) > 3:  transcription could just consist of a single phone!)
+	    if len(transcription) > 3 and len(phones) < 2:
+			p = ("Something is wrong with your transcription:  %s.\n" % w)
+			self.logger.warning(p)
+			## Maybe worth raising an exception if self.prompt == False
+			if self.prompt == True:
+	        	p += "Did you forget to enter spaces between individual phones?\n"
+				p += "Please enter new transcription:  "
+	        	new_trans = input(p)
+	        	transcription = check_transcription(new_trans)
+	    else:
+			for index, phone in enumerate(phones):
+				try:
+					check_phone(phone, transcription, index)
+				except ValueError as err:
+					raise err
+	    return transcription
+
+	def check_phone(self, phone, transcription, index):
+	    """checks that a phone entered by the user is part of the Arpabet"""
+	    ## INPUT:
+	    ## string p = phone
+	    ## string w = word the contains the phone (normal orthographic representation)
+	    ## int i = index of phone in word (starts at 0)
+	    ## OUTPUT:
+	    ## string final_p or p = phone in correct format
+		if len(p) == 3:
+			if str(p[-1]) not in ['0', '1', '2']:
+				raise ValueError("Unknown stress digit %s for vowel %s (at position %i) in word %s!\n" % (p[-1], p, i+1, w))
+			if p[:-1] not in self.VOWELS:
+				raise ValueError("Unknown vowel %s (at position %i) in word %s!\n" % (p[:-1], i+1, w))
+		elif len(p) <= 2:
+			if p in self.VOWELS:
+				raise ValueError("You forgot to enter the stress digit for vowel %s (at position %i) in word %s!\n" % (p, i+1, w))
+			if p not in self.CONSONANTS:
+				raise ValueError("Unknown phone %s (at position %i) in word %s!\n" % (p, i+1, w))
+		else:
+			raise ValueError("Unknown phone %s (at position %i) in word %s!\n" % (p, i+1, w))
+
+
+
+	# substitute any 'smart' quotes in the input file with the corresponding
+	# ASCII equivalents (otherwise they will be excluded as out-of-
+	# vocabulary with respect to the CMU pronouncing dictionary)
+	# WARNING: this function currently only works for UTF-8 input
+	def replace_smart_quotes(all_input):
+	  cleaned_lines = []
+	  for line in all_input:
+	    line = line.replace(u'\u2018', "'")
+	    line = line.replace(u'\u2019', "'")
+	    line = line.replace(u'\u201a', "'")
+	    line = line.replace(u'\u201b', "'")
+	    line = line.replace(u'\u201c', '"')
+	    line = line.replace(u'\u201d', '"')
+	    line = line.replace(u'\u201e', '"')
+	    line = line.replace(u'\u201f', '"')
+	    cleaned_lines.append(line)
+	  return cleaned_lines
+
+	def check_word(word, next_word='', unknown={}, line=''):
+	    """checks whether a given word's phonetic transcription is in the CMU dictionary;
+	    adds the transcription to the dictionary if not"""
+	    ## INPUT:
+	    ## string word = word to be checked
+	    ## string next_word = following word
+	    ## OUTPUT:
+	    ## dict unknown = unknown or truncated words (needed if "check transcription" option is selected; remains empty otherwise)
+	    ## - modifies CMU dictionary (dict cmudict)
+	    global cmudict
+
+	    clue = ''
+
+	    ## dictionary entry for truncated words may exist but not be correct for the current word
+	    ## (check first because word will be in CMU dictionary after procedure below)
+	    if truncated.search(word) and word in cmudict:
+	        ## check whether following word is "clue" word?
+	        if intended.search(next_word):
+	            clue = next_word
+	        ## do not prompt user for input if "check transcription" option is selected
+	        ## add truncated word together with its proposed transcription to list of unknown words
+	        ## (and with following "clue" word, if present)
+	        if options.check:
+	            if clue:
+	                unknown[word] = (cmudict[word], clue.lstrip('+'), line)
+	            else:
+	                unknown[word] = (cmudict[word], '', line)
+	        ## prompt user for input
+	        else:
+	            ## assume that truncated words are taken care of by the user if an import file is specified
+	            ## also, do not prompt user if "noprompt" option is selected
+	            if not (options.importfile or options.noprompt):
+	                print "Dictionary entry for truncated word %s is %s." % (word, cmudict[word])
+	                if clue:
+	                    print "Following word is %s." % next_word
+	                correct = raw_input("Is this correct?  [y/n]")
+	                if correct != "y":
+	                    transcription = prompt_user(word, clue)
+	                    cmudict[word] = [transcription]
+
+	    elif word not in cmudict and word not in STYLE_ENTRIES:
+	        ## truncated words:
+	        if truncated.search(word):
+	            ## is following word "clue" word?  (starts with "+")
+	            if intended.search(next_word):
+	                clue = next_word
+	        ## don't do anything if word itself is a clue word
+	        elif intended.search(word):
+	            return unknown
+	        ## don't do anything for unclear transcriptions:
+	        elif word == '((xxxx))':
+	            return unknown
+	        ## uncertain transcription:
+	        elif start_uncertain.search(word) or end_uncertain.search(word):
+	            if start_uncertain.search(word) and end_uncertain.search(word):
+	                word = word.replace('((', '')
+	                word = word.replace('))', '')
+	                ## check if word is in dictionary without the parentheses
+	                check_word(word, '', unknown, line)
+	                return unknown
+	            else:  ## This should not happen!
+	                error= "ERROR!  Something is wrong with the transcription of word %s!" % word
+	                errorhandler(error)
+	        ## asterisked transcriptions:
+	        elif word and word[0] == "*":
+	            ## check if word is in dictionary without the asterisk
+	            check_word(word[1:], '', unknown, line)
+	            return unknown
+	        ## generate new entries for "-in'" words
+	        if ing.search(word):
+	            gword = ing.sub("ING", word)
+	            ## if word has entry/entries for corresponding "-ing" form:
+	            if gword in cmudict:
+	                for t in cmudict[gword]:
+	                    ## check that transcription entry ends in "- IH0 NG":
+	                    if t[-1] == "NG" and t[-2] == "IH0":
+	                        tt = t
+	                        tt[-1] = "N"
+	                        tt[-2] = "AH0"
+	                        if word not in cmudict:
+	                            cmudict[word] = [tt]
+	                        else:
+	                            cmudict[word].append(tt)
+	                return unknown
+	        ## if "check transcription" option is selected, add word to list of unknown words
+	        if options.check:
+	            if clue:
+	                unknown[word] = ("", clue.lstrip('+'), line)
+	            else:
+	                unknown[word] = ("", "", line)
+	            if options.verbose:
+	                print "\tUnknown word %s : %s." % (word.encode('ascii', 'replace'), line.encode('ascii', 'replace'))
+
+	        ## otherwise, promput user for Arpabet transcription of missing word
+	        elif not options.noprompt:
+	            transcription = prompt_user(word, clue)
+	            ## add new transcription to dictionary
+	            if transcription:  ## user might choose to skip this word
+	                cmudict[word] = [transcription]
+
+	    return unknown
+
+	def merge_dicts(d1, d2):
+	    """merges two versions of the CMU pronouncing dictionary"""
+	    ## for each word, each transcription in d2, check if present in d1
+	    for word in d2:
+	        ## if no entry in d1, add entire entry
+	        if word not in d1:
+	            d1[word] = d2[word]
+	        ## if entry in d1, check whether additional transcription variants need to be added
+	        else:
+	            for t in d2[word]:
+	                if t not in d1[word]:
+	                    d1[word].append(t)
+	    return d1
+
+	def write_dict(f, dictionary="cmudict", mode='w'):
+	    """writes the new version of the CMU dictionary (or any other dictionary) to file"""
+
+	    ## default functionality is to write the CMU pronunciation dictionary back to file,
+	    ## but other dictionaries or parts of dictionaries can also be written/appended
+	    if dictionary == "cmudict":
+	        dictionary = cmudict
+	#        print "dictionary is cmudict"
+	    out = open(f, mode)
+	    ## sort dictionary before writing to file
+	    s = dictionary.keys()
+	    s.sort()
+	    for w in s:
+	        ## make a separate entry for each pronunciation in case of alternative entries
+	        for t in dictionary[w]:
+	            if t:
+	                out.write(w + '  ')     ## two spaces separating CMU dict entries from phonetic transcriptions
+	                for p in t:
+	                    out.write(p + ' ')  ## list of phones, separated by spaces
+	                out.write('\n')         ## end of entry line
+	    out.close()
+	#    if options.verbose:
+	#        print "Written pronunciation dictionary to file."
+
+
+
+	def write_words(out, unknown):
+	    """writes unknown words to file (in a specified encoding)"""
+
+	    for w in unknown:
+	        out.write(w)
+	        if unknown[w]:
+	            out.write('\t')
+	            ## put suggested transcription(s) for truncated word into second column, if present:
+	            if unknown[w][0]:
+	                 out.write(','.join([' '.join(i) for i in unknown[w][0]]))
+	            out.write('\t')
+	            ## put following clue word in third column, if present:
+	            if unknown[w][1]:
+	                out.write(unknown[w][1])
+	            ## put line in fourth column:
+	            out.write('\t' + unknown[w][2])
+	        out.write('\n')
+	    out.close()
