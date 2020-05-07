@@ -83,77 +83,20 @@ import subprocess
 import string
 
 truncated = re.compile(r'\w+\-$')                       ## truncated words
-intended = re.compile(r'^\+\w+')                        ## intended word (inserted by transcribers after truncated word)
-## NOTE:  earlier versions allowed uncertain/unclear transcription to use only one parenthesis,
-##        but this is now back to the strict definition
-##        (i.e. uncertain/unclear transcription spans MUST be enclosed in DOUBLE parentheses)
-unclear = re.compile(r'\(\(\s*\)\)')                    ## unclear transcription (empty double parentheses)
-start_uncertain = re.compile(r'(\(\()')                 ## beginning of uncertain transcription
-end_uncertain = re.compile(r'(\)\))')                   ## end of uncertain transcription
-uncertain = re.compile(r"\(\(([\*\+]?['\w]+\-?)\)\)")   ## uncertain transcription (single word)
-ing = re.compile(r"IN'$")                               ## words ending in "in'"
-hyphenated = re.compile(r'(\w+)-(\w+)')                 ## hyphenated words
 
-CONSONANTS = ['B', 'CH', 'D', 'DH','F', 'G', 'HH', 'JH', 'K', 'L', 'M', 'N', 'NG', 'P', 'R', 'S', 'SH', 'T', 'TH', 'V', 'W', 'Y', 'Z', 'ZH']
-VOWELS = ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 'IH', 'IY', 'OW', 'OY', 'UH', 'UW']
+ing = re.compile(r"IN'$")                               ## words ending in "in'"
+
+
+
 STYLE = ["style", "Style", "STYLE"]
 STYLE_ENTRIES = ["R", "N", "L", "G", "S", "K", "T", "C", "WL", "MP", "SD", "RP"]
 
 #TEMPDIR = "temp_FA"
 TEMPDIR = ""
-DICT_ADDITIONS = "added_dict_entries.txt"               ## file for collecting uploaded additions to the dictionary
 PRAATPATH = "/usr/local/bin/praat"                      ## this is just in case the wave module does not work (use Praat instead to determe the length of the sound file)
 ##PRAATPATH = "/Applications/Praat.app/Contents/MacOS/praat"  ## old setting on ingridpc.ling.upenn.edu
 
 ################################################################################
-
-def add_dictionary_entries(infile, FADIR):
-    """reads additional dictionary entries from file and adds them to the CMU dictionary"""
-    ## INPUT:  string infile = name of tab-delimited file with word and Arpabet transcription entries
-    ## OUTPUT:  none, but modifies CMU dictionary (cmudict)
-
-    ## read import file
-    i = open(infile, 'rU')
-    lines = i.readlines()
-    i.close()
-
-    global cmudict
-    add_dict = {}
-
-    ## process entries
-    for line in lines:
-        try:
-            word = line.strip().split('\t')[0].upper()
-            trans = [check_transcription(t.strip()) for t in line.strip().split('\t')[1].replace('"', '').split(',')]
-            ## (transcriptions will be converted to upper case in check_transcription)
-            ## (possible to have more than one (comma-separated) transcription per word in input file)
-        except IndexError:
-            error = "ERROR!  Incorrect format of dictionary input file %s:  Problem with line \"%s\"." % (infile, line)
-            errorhandler(error)
-        ## add new entry to CMU dictionary
-        if word not in cmudict and trans:
-            cmudict[word] = trans
-            add_dict[word] = trans
-        else:   ## word might be in dict but transcriber might want to add alternative pronunciation
-            for t in trans:
-                if t and (t not in cmudict[word]):  ## check that new transcription is not already in dictionary  
-                    cmudict[word].append(t)
-                    add_dict[word] = [t]
-
-    if options.verbose:
-        print "Added all entries in file %s to CMU dictionary." % os.path.basename(infile)
-
-    ## add new entries to the file for additional transcription entries
-    ## (merge with the existing DICT_ADDITIONS file to avoid duplicates)
-    if os.path.exists(os.path.join(FADIR, DICT_ADDITIONS)):  ## check whether dictionary additions file exists already
-        added_already = read_dict(os.path.join(FADIR, DICT_ADDITIONS))
-        new_dict = merge_dicts(added_already, add_dict)
-    else:
-        new_dict = add_dict
-    write_dict(os.path.join(FADIR, DICT_ADDITIONS), dictionary=new_dict, mode='w')
-    if options.verbose:
-        print "Added new entries from file %s to file %s." % (os.path.basename(infile), DICT_ADDITIONS)
-
 
 ## This was the main body of Jiahong Yuan's original align.py
 def align(wavfile, trs_input, outfile, FADIR='', SOXPATH='', HTKTOOLSPATH=''):
@@ -161,7 +104,7 @@ def align(wavfile, trs_input, outfile, FADIR='', SOXPATH='', HTKTOOLSPATH=''):
     ## wavfile = sound file to be aligned
     ## trsfile = corresponding transcription file
     ## outfile = output TextGrid
-    
+
     ## change to Forced Alignment Toolkit directory for all the temp and preparation files
     if FADIR:
         os.chdir(FADIR)
@@ -177,15 +120,15 @@ def align(wavfile, trs_input, outfile, FADIR='', SOXPATH='', HTKTOOLSPATH=''):
     ## - "tmp.mlf"
     ## - "tmp.plp"
     ## - "tmp.wav"
-    
-    # create working directory  
+
+    # create working directory
     os.mkdir("./tmp" + identifier)
     # prepare wavefile
     SR = prep_wav(wavfile, './tmp' + identifier + '/tmp' + identifier + '.wav', SOXPATH)
 
     # prepare mlfile
     prep_mlf(trs_input, './tmp' + identifier + '/tmp' + identifier + '.mlf', identifier)
- 
+
     # prepare scp files
     fw = open('./tmp' + identifier + '/codetr' + identifier + '.scp', 'w')
     fw.write('./tmp' + identifier + '/tmp' + identifier + '.wav ./tmp' + identifier + '/tmp'+ identifier + '.plp\n')
@@ -216,15 +159,15 @@ def align(wavfile, trs_input, outfile, FADIR='', SOXPATH='', HTKTOOLSPATH=''):
         raise Exception, FA_error
         ##errorhandler(FA_error)
 
-    ## remove tmp directory and all files        
+    ## remove tmp directory and all files
     shutil.rmtree("./tmp" + identifier)
-    
+
 
 ## This function is from Jiahong Yuan's align.py
 ## (originally called "TextGrid(infile, outfile, SR)")
 def aligned_to_TextGrid(infile, outfile, SR):
     """writes the results of the forced alignment (file "aligned.mlf") to file as a Praat TextGrid file"""
-    
+
     f = open(infile, 'rU')
     lines = f.readlines()
     f.close()
@@ -238,7 +181,7 @@ def aligned_to_TextGrid(infile, outfile, SR):
         if (SR == 11025):  ## adjust rounding error for 11,025 Hz sampling rate
             ## convert time stamps from 100ns units to seconds
             ## fix overlapping intervals:  divide time stamp by ten first and round!
-            st = round((round(float(lines[j].split()[0])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)  ## start time 
+            st = round((round(float(lines[j].split()[0])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)  ## start time
             en = round((round(float(lines[j].split()[1])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)  ## end time
         else:
             st = round(round(float(lines[j].split()[0])/10.0, 0)/1000000.0 + 0.0125, 3)
@@ -247,7 +190,7 @@ def aligned_to_TextGrid(infile, outfile, SR):
             phons.append([ph, st, en])  ## list of phones with start and end times in seconds
 
         if (len(lines[j].split()) == 5):  ## entry on word tier
-            wrd = lines[j].split()[4].replace('\n', '') 
+            wrd = lines[j].split()[4].replace('\n', '')
             if (SR == 11025):
                 st = round((round(float(lines[j].split()[0])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)
                 en = round((round(float(lines[j].split()[1])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)
@@ -261,7 +204,7 @@ def aligned_to_TextGrid(infile, outfile, SR):
 ##    except Exception, e:
 ##        FA_error = "Error in converting times from file %s in line %d for TextGrid %s:  %s." % (os.path.basename(infile), j + 1, os.path.basename(outfile), e)
 ##        errorhandler(FA_error)
-        
+
 ##    try:
     #write the phone interval tier
     fw.write('File type = "ooTextFile short"\n')
@@ -350,7 +293,7 @@ def check_arguments(args):
                     print error
                     sys.exit(parser.print_usage())
                 else:
-                    raise Exception, error               
+                    raise Exception, error
         else:  ## this should not happen
             error = "Something weird is going on here!!!"
             errorhandler(error)
@@ -364,79 +307,9 @@ def check_arguments(args):
 
     return (wavfile, trsfile, tgfile)
 
-
-def check_dictionary_entries(lines, wavfile):
-    """checks that all words in lines have an entry in the CMU dictionary;
-    if not, prompts user for Arpabet transcription and adds it to the dict file.
-    If "check transcription" option is selected, writes list of unknown words to file and exits."""
-    ## INPUT:  list of lines to check against CMU dictionary
-    ## OUTPUT:  list newlines = list of list of words for each line (processed)
-    ## - prompts user to modify CMU dictionary (cmudict) and writes updated version of CMU dictionary to file
-    ## - if "check transcription" option is selected, writes list of unknown words to file and exits
-
-    newlines = []
-    unknown = {}
-    ## "flag_uncertain" indicates whether we are currently inside an uncertain section of transcription
-    ## (switched on and off by the beginning or end of double parentheses:  "((", "))")
-    flag_uncertain = False
-    last_beg_uncertain = ''
-    last_end_uncertain = ''
-
-    for line in lines:
-        newwords = []
-        ## get list of preprocessed words in each line
-        ## ("uncertainty flag" has to be passed back and forth because uncertain passages might span more than one breathgroup)
-        (words, flag_uncertain, last_beg_uncertain, last_end_uncertain) = preprocess_transcription(line.strip().upper(), flag_uncertain, last_beg_uncertain, last_end_uncertain)
-        ## check each word in transcription as to whether it is in the CMU dictionary:
-        ## (if "check transcription" option is not set, dict unknown will simply remain empty)
-        for i, w in enumerate(words):
-            if i < len(words) - 1:
-                unknown = check_word(w, words[i+1], unknown, line)
-            else:
-                unknown = check_word(w, '', unknown, line)               ## last word in line
-            ## take "clue words" out of transcription:
-            if not intended.search(uncertain.sub(r'\1', w)):
-                newwords.append(w)
-        newlines.append(newwords)
-
-    ## write new version of the CMU dictionary to file
-    ## (do this here so that new entries to dictionary will still be saved if "check transcription" option is selected
-    ## in addition to the "import transcriptions" option)
-    #write_dict(options.dict)
-    ## NOTE:  dict will no longer be re-written to file as people might upload all kinds of junk
-    ##        Uploaded additional transcriptions will be written to a separate file instead (in add_dictionary_entries), 
-    ##        to be checked manually and merged with the main dictionary at certain intervals
-
-        
-    ## write temporary version of the CMU dict to file for use in alignment
-    global options  ## need to make options global because dict setting must be changed
-    if not options.check:
-        global temp_dict
-        temp_dict = os.path.join(os.path.dirname(wavfile), '_'.join(os.path.basename(wavfile).split('_')[:2]) + "_" + "dict")
-        print "temp_dict is %s." % temp_dict
-        write_dict(temp_dict)
-        if options.verbose:
-            print "Written updated temporary version of CMU dictionary."
-        ## forced alignment must use updated cmudict, not original one
-        options.dict = temp_dict
-
-    ## "CHECK TRANSCRIPTION" OPTION:
-    ## write list of unknown words and suggested transcriptions for truncated words to file
-    if options.check:
-        write_unknown_words(unknown)            
-        print "Written list of unknown words in transcription to file %s." % options.check
-        if __name__ == "__main__":
-            sys.exit()
-            
-    ## CONTINUE TO ALIGNMENT:
-    else:
-        ## return new transcription (list of lists of words, for each line)
-        return newlines
-    
-
 def check_file(path):
     """checks whether a file exists at a given location and is a data file"""
-    
+
     if os.path.exists(path) and os.path.isfile(path):
         return path
     else:
@@ -455,76 +328,6 @@ def check_file(path):
             error = "ERROR!  File %s could not be found!" % path
             errorhandler(error)
 
-
-def check_phone(p, w, i):
-    """checks that a phone entered by the user is part of the Arpabet"""
-    ## INPUT:
-    ## string p = phone
-    ## string w = word the contains the phone (normal orthographic representation)
-    ## int i = index of phone in word (starts at 0)
-    ## OUTPUT:
-    ## string final_p or p = phone in correct format
-    
-    if not ((len(p) == 3 and p[-1] in ['0', '1', '2'] and p[:-1] in VOWELS) or (len(p) <= 2 and p in CONSONANTS)):
-        ## check whether transcriber didn't simply forget the stress coding for vowels:
-        if __name__ == "__main__":
-            if len(p) == 2 and p in VOWELS:
-                print "You forgot to enter the stress digit for vowel %s (at position %i) in word %s!\n" % (p, i+1, w)
-                new_p = raw_input("Please re-enter vowel transcription, or type [q] to quit:  ")
-            else:
-                print "Unknown phone %s (at position %i) in word %s!\n" % (p, i+1, w)
-                new_p = raw_input("Please correct your transcription for this phone, or type [q] to quit:  ")
-            ## EMERGENCY EXIT:
-            ## (to get out of the loop without having to kill the terminal) 
-            if new_p in ['q', 'Q']:
-                sys.exit()
-            ## check new transcription:
-            final_p = check_phone(new_p, w, i)
-            return final_p
-        else:
-            error = "Unknown phone %s (at position %i) in word %s!\n" % (p, i+1, w)
-            errorhandler(error)
-    else:
-        return p
-
-
-def check_transcription(w):
-    """checks that the transcription entered for a word conforms to the Arpabet style"""
-    ## INPUT:  string w = phonetic transcription of a word (phones should be separated by spaces)
-    ## OUTPUT:  list final_trans = list of individual phones (upper case, checked for correct format)
-    
-    ## convert to upper case and split into phones
-    phones = w.upper().split()
-    ## check that phones are separated by spaces
-    ## (len(w) > 3:  transcription could just consist of a single phone!)
-    if len(w) > 3 and len(phones) < 2:
-        print "Something is wrong with your transcription:  %s.\n" % w
-        print "Did you forget to enter spaces between individual phones?\n"
-        new_trans = raw_input("Please enter new transcription:  ")
-        final_trans = check_transcription(new_trans)
-    else:
-        final_trans = [check_phone(p, w, i) for i, p in enumerate(phones)]
-        
-    return final_trans
-
-# substitute any 'smart' quotes in the input file with the corresponding
-# ASCII equivalents (otherwise they will be excluded as out-of-
-# vocabulary with respect to the CMU pronouncing dictionary)
-# WARNING: this function currently only works for UTF-8 input
-def replace_smart_quotes(all_input):
-  cleaned_lines = []
-  for line in all_input:
-    line = line.replace(u'\u2018', "'")
-    line = line.replace(u'\u2019', "'")
-    line = line.replace(u'\u201a', "'")
-    line = line.replace(u'\u201b', "'")
-    line = line.replace(u'\u201c', '"')
-    line = line.replace(u'\u201d', '"')
-    line = line.replace(u'\u201e', '"')
-    line = line.replace(u'\u201f', '"')
-    cleaned_lines.append(line)
-  return cleaned_lines
-
 def check_transcription_file(all_input):
     """checks the format of the input transcription file and returns a list of empty lines to be deleted from the input"""
     trans_lines = []
@@ -536,15 +339,15 @@ def check_transcription_file(all_input):
         if d_line:
             delete_lines.append(d_line)
 
-    return trans_lines, delete_lines    
+    return trans_lines, delete_lines
 
 
 def check_transcription_format(line):
     """checks that input format of transcription file is correct (5 tab-delimited data fields)"""
     ## INPUT:  string line = line of transcription file
     ## OUTPUT: list entries = fields in line (speaker ID and name, begin and end times, transcription text)
-    ##         string line = empty transcription line to be deleted 
-    
+    ##         string line = empty transcription line to be deleted
+
     entries = line.rstrip().split('\t')
     ## skip empty lines
     if line.strip():
@@ -577,113 +380,9 @@ def check_transcription_format(line):
     else:
         return None, line
 
-
-def check_word(word, next_word='', unknown={}, line=''):
-    """checks whether a given word's phonetic transcription is in the CMU dictionary;
-    adds the transcription to the dictionary if not"""
-    ## INPUT:                              
-    ## string word = word to be checked           
-    ## string next_word = following word
-    ## OUTPUT:
-    ## dict unknown = unknown or truncated words (needed if "check transcription" option is selected; remains empty otherwise)
-    ## - modifies CMU dictionary (dict cmudict)
-    global cmudict
-
-    clue = ''
-
-    ## dictionary entry for truncated words may exist but not be correct for the current word
-    ## (check first because word will be in CMU dictionary after procedure below)
-    if truncated.search(word) and word in cmudict:
-        ## check whether following word is "clue" word? 
-        if intended.search(next_word):
-            clue = next_word
-        ## do not prompt user for input if "check transcription" option is selected
-        ## add truncated word together with its proposed transcription to list of unknown words
-        ## (and with following "clue" word, if present)
-        if options.check:
-            if clue:
-                unknown[word] = (cmudict[word], clue.lstrip('+'), line)
-            else:
-                unknown[word] = (cmudict[word], '', line)
-        ## prompt user for input
-        else:
-            ## assume that truncated words are taken care of by the user if an import file is specified
-            ## also, do not prompt user if "noprompt" option is selected
-            if not (options.importfile or options.noprompt):
-                print "Dictionary entry for truncated word %s is %s." % (word, cmudict[word])
-                if clue:
-                    print "Following word is %s." % next_word
-                correct = raw_input("Is this correct?  [y/n]")
-                if correct != "y":
-                    transcription = prompt_user(word, clue) 
-                    cmudict[word] = [transcription]
-    
-    elif word not in cmudict and word not in STYLE_ENTRIES:
-        ## truncated words:
-        if truncated.search(word):
-            ## is following word "clue" word?  (starts with "+")
-            if intended.search(next_word):
-                clue = next_word
-        ## don't do anything if word itself is a clue word
-        elif intended.search(word):
-            return unknown
-        ## don't do anything for unclear transcriptions:
-        elif word == '((xxxx))':
-            return unknown
-        ## uncertain transcription:
-        elif start_uncertain.search(word) or end_uncertain.search(word):
-            if start_uncertain.search(word) and end_uncertain.search(word):
-                word = word.replace('((', '')
-                word = word.replace('))', '')
-                ## check if word is in dictionary without the parentheses
-                check_word(word, '', unknown, line)
-                return unknown
-            else:  ## This should not happen!
-                error= "ERROR!  Something is wrong with the transcription of word %s!" % word
-                errorhandler(error)
-        ## asterisked transcriptions:
-        elif word and word[0] == "*":
-            ## check if word is in dictionary without the asterisk
-            check_word(word[1:], '', unknown, line)
-            return unknown
-        ## generate new entries for "-in'" words
-        if ing.search(word):
-            gword = ing.sub("ING", word)
-            ## if word has entry/entries for corresponding "-ing" form:
-            if gword in cmudict:
-                for t in cmudict[gword]:
-                    ## check that transcription entry ends in "- IH0 NG":
-                    if t[-1] == "NG" and t[-2] == "IH0":
-                        tt = t
-                        tt[-1] = "N"
-                        tt[-2] = "AH0"
-                        if word not in cmudict:
-                            cmudict[word] = [tt]
-                        else:
-                            cmudict[word].append(tt)
-                return unknown
-        ## if "check transcription" option is selected, add word to list of unknown words
-        if options.check:
-            if clue:
-                unknown[word] = ("", clue.lstrip('+'), line)
-            else:
-                unknown[word] = ("", "", line)
-            if options.verbose:
-                print "\tUnknown word %s : %s." % (word.encode('ascii', 'replace'), line.encode('ascii', 'replace'))
-
-        ## otherwise, promput user for Arpabet transcription of missing word
-        elif not options.noprompt:
-            transcription = prompt_user(word, clue)
-            ## add new transcription to dictionary
-            if transcription:  ## user might choose to skip this word
-                cmudict[word] = [transcription]
-
-    return unknown
-
-
 def cut_chunk(wavfile, outfile, start, dur, SOXPATH):
     """uses SoX to cut a portion out of a sound file"""
-    
+
     if SOXPATH:
         command_cut_sound = " ".join([SOXPATH, '\"' + wavfile + '\"', '\"' + outfile + '\"', "trim", str(start), str(dur)])
         ## ("sox <original sound file> "<new sound chunk>" trim <start of selection (in sec)> <duration of selection (in sec)>")
@@ -701,9 +400,9 @@ def cut_chunk(wavfile, outfile, start, dur, SOXPATH):
 
 def define_options_and_arguments():
     """defines options and positional arguments for this program"""
-    
+
     use = """(python) %prog [options] soundfile.wav [transcription.txt] [output.TextGrid]"""
-    desc = """Aligns a sound file with the corresponding transcription text. The transcription text is split into annotation breath groups, which are fed individually as "chunks" to the forced aligner. All output is concatenated into a single Praat TextGrid file. 
+    desc = """Aligns a sound file with the corresponding transcription text. The transcription text is split into annotation breath groups, which are fed individually as "chunks" to the forced aligner. All output is concatenated into a single Praat TextGrid file.
 
     INPUT:
     - sound file
@@ -783,16 +482,16 @@ def delete_empty_lines(delete_lines, all_input):
         print "Deleted empty lines from original transcription file."
 
     return all_input
-        
+
 
 def errorhandler(errormessage):
     """handles the error depending on whether the file is run as a standalone or as an imported module"""
-    
+
     if __name__ == "__main__":  ## file run as standalone program
         sys.exit(errormessage)
     else:  ## run as imported module from somewhere else -> propagate exception
         raise Exception, errormessage
-    
+
 
 def format_option_text(text):
     """re-formats usage, description and epiloge strings for the OptionParser
@@ -802,7 +501,7 @@ def format_option_text(text):
     ## "textwrap" appears to preserve (non-initial) spaces, so all lines containing newlines
     ## are padded with spaces until they reach the length of 80 characters,
     ## which is the width to which "textwrap" formats the description text.
-    
+
     lines = text.split('\n')
     newlines = ''
     for line in lines:
@@ -811,7 +510,7 @@ def format_option_text(text):
         if m != 0:
             line += (' ' * (80 - m))
         newlines += line
-        
+
     return newlines
 
 
@@ -833,13 +532,13 @@ def get_duration(soundfile, FADIR=''):
         else:
             dur_command = "praat %s %s" % (os.path.join(FADIR, "get_duration.praat"), soundfile)
         duration = round(float(subprocess.Popen(dur_command, shell=True, stdout=subprocess.PIPE).communicate()[0].strip()), 3)
-    
+
     return duration
-    
+
 
 def is_sound(f):
     """checks whether a file is a .wav sound file"""
-    
+
     if f.lower().endswith('.wav'):
 ## NOTE:  This is the old version of the file check using a call to 'file' via the command line
 ##    and ("audio/x-wav" in subprocess.Popen('file -bi "%s"' % f, shell=True, stdout=subprocess.PIPE).communicate()[0].strip()
@@ -854,7 +553,7 @@ def is_sound(f):
 
 def is_text(f):
     """checks whether a file is a .txt text file"""
-    
+
     if f.lower().endswith('.txt'):
 ## NOTE:  This is the old version of the file check using a call to 'file' via the command line
 ##    and ("text/plain" in subprocess.Popen('file -bi "%s"' % f, shell=True, stdout=subprocess.PIPE).communicate()[0].strip()
@@ -866,7 +565,7 @@ def is_text(f):
 
 def is_TextGrid(f):
     """checks whether a file is a .TextGrid file"""
-    
+
     if re.search("\.TextGrid$", f):  ## do not test the actual file type because file does not yet exist at this point!
         return True
     else:
@@ -876,7 +575,7 @@ def is_TextGrid(f):
 # def make_tempdir(tempdir):
 #     """creates a temporary directory for all alignment "chunks";
 #     warns against overwriting existing files if applicable"""
-    
+
 #     ## check whether directory already exists and has files in it
 #     if os.path.isdir(tempdir):
 #         contents = os.listdir(tempdir)
@@ -898,7 +597,7 @@ def is_TextGrid(f):
 
 def check_tempdir(tempdir):
     """checks that the temporary directory for all alignment "chunks" is empty"""
-    
+
     ## (NOTE:  This is a modified version of make_tempdir)
     ## check whether directory already exists and has files in it
     if os.path.isdir(tempdir):
@@ -919,30 +618,14 @@ def check_tempdir(tempdir):
 
 def mark_time(index):
     """generates a time stamp entry in global list times[]"""
-    
+
     cpu_time = time.clock()
     real_time = time.time()
     times.append((index, cpu_time, real_time))
 
-
-def merge_dicts(d1, d2):
-    """merges two versions of the CMU pronouncing dictionary"""
-    ## for each word, each transcription in d2, check if present in d1
-    for word in d2:
-        ## if no entry in d1, add entire entry 
-        if word not in d1:
-            d1[word] = d2[word]
-        ## if entry in d1, check whether additional transcription variants need to be added
-        else:
-            for t in d2[word]:
-                if t not in d1[word]:
-                    d1[word].append(t)
-    return d1
-
-
 def merge_textgrids(main_textgrid, new_textgrid, speaker, chunkname_textgrid):
     """adds the contents of TextGrid new_textgrid to TextGrid main_textgrid"""
-    
+
     for tier in new_textgrid:
         ## change tier names to reflect speaker names
         ## (output of FA program is "phone", "word" -> "Speaker - phone", "Speaker - word")
@@ -960,71 +643,8 @@ def merge_textgrids(main_textgrid, new_textgrid, speaker, chunkname_textgrid):
             main_textgrid.append(tier)
     if options.verbose:
         print "\tSuccessfully added", chunkname_textgrid, "to main TextGrid."
-        
+
     return main_textgrid
-
-
-def preprocess_transcription(line, flag_uncertain, last_beg_uncertain, last_end_uncertain):
-    """preprocesses transcription input for CMU dictionary lookup and forced alignment"""
-    ## INPUT:  string line = line of orthographic transcription
-    ## OUTPUT:  list words = list of individual words in transcription
-    
-    original_line = line
-
-    ## make "high school" into one word (for /ay0/ raising)
-    line = line.replace('high school', 'highschool')
-    
-    ## make beginning and end of uncertain transcription spans into separate words
-    line = start_uncertain.sub(r' (( ', line)
-    line = end_uncertain.sub(r' )) ', line)   
-    ## correct a common transcription error (one dash instead of two)
-    line = line.replace(' - ', ' -- ')
-    ## delete punctuation marks
-    for p in [',', '.', ':', ';', '!', '?', '"', '%', '--']:
-        line = line.replace(p, ' ')
-    ## delete initial apostrophes
-    line = re.compile(r"(\s|^)'\b").sub(" ", line)
-    ## delete variable coding for consonant cluster reduction
-    line = re.compile(r"\d\w(\w)?").sub(" ", line)
-    ## replace unclear transcription markup (empty parentheses):
-    line = unclear.sub('((xxxx))', line)
-    ## correct another transcription error:  truncation dash outside of double parentheses will become a word
-    line = line.replace(' - ', '')
-
-    ## split hyphenated words (but keep truncated words as they are!)
-    ## NOTE:  This also affects the interjections "huh-uh", "uh-huh" and "uh-oh".
-    ## However, should work fine just aligning individual components.
-    line = hyphenated.sub(r'\1 \2', line)
-    line = hyphenated.sub(r'\1 \2', line)   ## do this twice for words like "daughter-in-law"
-    
-    ## split line into words:
-    words = line.split()
-
-    ## add uncertainty parentheses around every word individually
-    newwords = []
-    for word in words:
-        if word == "((":        ## beginning of uncertain transcription span
-            if not flag_uncertain:
-                flag_uncertain = True
-                last_beg_uncertain = original_line
-            else:   ## This should not happen! (but might because of transcription errors)
-                error = "ERROR!  Beginning of uncertain transcription span detected twice in a row:  %s.  Please close the the opening double parenthesis in line %s." % (original_line, last_beg_uncertain)
-                errorhandler(error)
-        elif word == "))":      ## end of uncertain transcription span
-            if flag_uncertain:
-                flag_uncertain = False
-                last_end_uncertain = original_line
-            else:   ## Again, this should not happen! (but might because of transcription errors)
-                error = "ERROR!  End of uncertain transcription span detected twice in a row:  No opening double parentheses for line %s." % original_line
-                errorhandler(error)
-        else:  ## process words
-            if flag_uncertain:
-                newwords.append("((" + word + "))")
-            else:
-                newwords.append(word)
-
-    return (newwords, flag_uncertain, last_beg_uncertain, last_end_uncertain)
-
 
 ## This function originally is from Jiahong Yuan's align.py
 ## (very much modified by Ingrid...)
@@ -1036,7 +656,7 @@ def prep_mlf(transcription, mlffile, identifier):
     ## string identifier = unique identifier of process/sound file (can't just call everything "tmp")
     ## OUTPUT:
     ## none, but writes master label file to disk
-    
+
     fw = open(mlffile, 'w')
     fw.write('#!MLF!#\n')
     fw.write('"*/tmp' + identifier + '.lab"\n')
@@ -1085,7 +705,7 @@ def prep_wav(orig_wav, out_wav, SOXPATH=''):
     if SOXPATH:  ## if FAAValign is used as a CGI script, the path to SoX needs to be specified explicitly
         os.system(SOXPATH + ' \"' + orig_wav + '\" -c 1 -r 16000 ' + out_wav)
     else:        ## otherwise, rely on the shell to find the correct path
-        os.system("sox" + ' \"' + orig_wav + '\" -c 1 -r 16000 ' + out_wav)            
+        os.system("sox" + ' \"' + orig_wav + '\" -c 1 -r 16000 ' + out_wav)
         #os.system("sox " + orig_wav + " -c 1 -r 11025 " + out_wav + " polyphase")
 ##    else:
 ##        os.system("cp -f " + '\"' + orig_wav + '\"' + " " + out_wav)
@@ -1095,7 +715,7 @@ def prep_wav(orig_wav, out_wav, SOXPATH=''):
 
 def process_style_tier(entries, style_tier=None):
     """processes entries of style tier"""
-    
+
     ## create new tier for style, if not already in existence
     if not style_tier:
         style_tier = praat.IntervalTier(name="style", xmin=0, xmax=0)
@@ -1111,7 +731,7 @@ def process_style_tier(entries, style_tier=None):
 ##    else:
 ##        error = "ERROR!  Invalid entry on style tier:  %s (interval %.2f - %.2f)" % (text, beg, end)
 ##        errorhandler(error)
-        
+
     return style_tier
 
 
@@ -1122,7 +742,7 @@ def prompt_user(word, clue=''):
     ## string clue = following word (optional)
     ## OUTPUT:
     ## list checked_trans = transcription in Arpabet format (list of phones)
-    
+
     print "Please enter the Arpabet transcription of word %s, or enter [s] to skip." % word
     if clue:
         print "(Following word is %s.)" % clue
@@ -1133,40 +753,6 @@ def prompt_user(word, clue=''):
         return checked_trans
     else:
         return None
-
-
-## This function is from Keelan Evanini's cmu.py:
-def read_dict(f):
-    """reads the CMU dictionary (or any other dictionary in the same format) and returns it as dictionary object,
-    allowing multiple pronunciations for the same word"""
-    ## INPUT:  string f = name/path of dictionary file
-    ## OUTPUT:  dict cmudict = dictionary of word - (list of) transcription(s) pairs
-    ## (where each transcription consists of a list of phones)
-    
-    dictfile = open(f, 'rU')
-    lines = dictfile.readlines()
-    cmudict = {}
-    pat = re.compile('  *')                ## two spaces separating CMU dict entries
-    for line in lines:
-        line = line.rstrip()
-        line = re.sub(pat, ' ', line)      ## reduce all spaces to one
-        word = line.split(' ')[0]          ## orthographic transcription
-        phones = line.split(' ')[1:]       ## phonemic transcription
-        if word not in cmudict:
-            cmudict[word] = [phones]       ## phonemic transcriptions represented as list of lists of phones
-        else:
-            if phones not in cmudict[word]:
-                cmudict[word].append(phones)   ## add alternative pronunciation to list of pronunciations
-    dictfile.close()
-    
-    ## check that cmudict has entries
-    if len(cmudict) == 0:
-        print "WARNING!  Dictionary is empty."
-    if options.verbose:
-        print "Read dictionary from file %s." % f
-        
-    return cmudict
-
 
 def read_transcription_file(trsfile):
     """reads the transcription file in either ASCII or UTF-16 encoding, returns a list of lines in the file"""
@@ -1216,7 +802,7 @@ def reinsert_uncertain(tg, text):
     for (n, entry) in enumerate(tgwords):
         tgword = entry[0]               ## interval entry on word tier of FA output TextGrid
         tgposition = entry[1]           ## corresponding position of that word in the TextGrid tier
-        
+
         ## if "noprompt" option is selected, or if the user chooses the "skip" option in the interactive prompt,
         ## forced alignment ignores unknown words & indexes will not match!
         ## -> count how many words have been ignored up to here and adjust n accordingly (n = n + ignored)
@@ -1227,7 +813,7 @@ def reinsert_uncertain(tg, text):
             if (uncertain.sub(r'\1', text[i]).lstrip('*') not in cmudict and text[i] != "((xxxx))"):
                 n += 1  ## !!! adjust n for every ignored word that is found !!!
             i += 1
-        
+
         ## original transcription contains unclear transcription:
         if text[n] == "((xxxx))":
             ## corresponding interval in TextGrid must have "{NS}"
@@ -1254,19 +840,19 @@ def reinsert_uncertain(tg, text):
             else:  ## This should not happen!
                  error = "ERROR!  Something went wrong in the substitution of asterisked transcriptions for the forced alignment!"
                  errorhandler(error)
-            
+
     return tg
 
 
 # def remove_tempdir(tempdir):
 #     """removes the temporary directory and all its contents"""
-    
+
 #     for item in os.listdir(tempdir):
 #         os.remove(os.path.join(tempdir, item))
 #     os.removedirs(tempdir)
 #     os.remove("blubbeldiblubb.txt")
 
- 
+
 def replace_extension(filename, newextension):
     """chops off the extension from the filename and replaces it with newextension"""
 
@@ -1276,7 +862,7 @@ def replace_extension(filename, newextension):
 # def empty_tempdir(tempdir):
 #     """empties the temporary directory of all files"""
 #     ## (NOTE:  This is a modified version of remove_tempdir)
-    
+
 #     for item in os.listdir(tempdir):
 #         os.remove(os.path.join(tempdir, item))
 #     os.remove("blubbeldiblubb.txt")
@@ -1285,7 +871,7 @@ def replace_extension(filename, newextension):
 def tidyup(tg, beg, end, tgfile):
     """extends the duration of a TextGrid and all its tiers from beg to end;
     inserts empty/"SP" intervals; checks for overlapping intervals"""
-    
+
     ## set overall duration of main TextGrid
     tg.change_times(beg, end)
     ## set duration of all tiers and check for overlaps
@@ -1304,38 +890,13 @@ def tidyup(tg, beg, end, tgfile):
     if len(overlaps) != 0:
         print "WARNING!  Overlapping intervals detected!"
         write_errorlog(overlaps, tgfile)
-        
+
     return tg
 
 
-def write_dict(f, dictionary="cmudict", mode='w'):
-    """writes the new version of the CMU dictionary (or any other dictionary) to file"""
-    
-    ## default functionality is to write the CMU pronunciation dictionary back to file,
-    ## but other dictionaries or parts of dictionaries can also be written/appended
-    if dictionary == "cmudict":
-        dictionary = cmudict
-#        print "dictionary is cmudict"
-    out = open(f, mode)
-    ## sort dictionary before writing to file
-    s = dictionary.keys()
-    s.sort()
-    for w in s:
-        ## make a separate entry for each pronunciation in case of alternative entries
-        for t in dictionary[w]:
-            if t:
-                out.write(w + '  ')     ## two spaces separating CMU dict entries from phonetic transcriptions
-                for p in t:
-                    out.write(p + ' ')  ## list of phones, separated by spaces
-                out.write('\n')         ## end of entry line
-    out.close()
-#    if options.verbose:
-#        print "Written pronunciation dictionary to file."
-   
-
 def write_errorlog(overlaps, tgfile):
     """writes log file with details on overlapping interval boundaries to file"""
-    
+
     ## write log file for overlapping intervals from FA
     logname = os.path.splitext(tgfile)[0] + ".errorlog"
     errorlog = open(logname, 'w')
@@ -1369,11 +930,11 @@ def write_alignment_errors_to_log(tgfile, failed_alignment):
         errorlog.write('\n')
     errorlog.close()
     print "Alignment errors saved to file %s." % logname
-    
+
 
 def write_log(filename, wavfile, duration):
     """writes a log file on alignment statistics"""
-    
+
     f = open(filename, 'w')
     t_stamp = time.asctime()
     f.write(t_stamp)
@@ -1406,7 +967,7 @@ def write_log(filename, wavfile, duration):
     if changes:
         f.write("Uncommitted changes when run:\n")
         f.write(changes)
-        
+
     f.write("\n")
     f.write("Total number of words:\t\t\t%i\n" % count_words)
     f.write("Uncertain transcriptions:\t\t%i\t(%.1f%%)\n" % (count_uncertain, float(count_uncertain)/float(count_words)*100))
@@ -1428,7 +989,7 @@ def write_log(filename, wavfile, duration):
         f.write(str(round(times[i][1], 3)))                     ## CPU time
         f.write("\t")
         f.write(time.asctime(time.localtime(times[i][2])))      ## real time
-        f.write("\t")        
+        f.write("\t")
         if i > 0:                                               ## time differences (in seconds)
             f.write(str(round(times[i][1] - times[i-1][1], 3)))
             f.write("\t")
@@ -1437,38 +998,6 @@ def write_log(filename, wavfile, duration):
     f.close()
 
     return t_stamp
-
-
-def write_unknown_words(unknown):
-    """writes the list of unknown words to file"""
-        ## try ASCII output first:
-    try:
-        out = open(options.check, 'w')
-        write_words(out, unknown)
-    except UnicodeEncodeError:  ## encountered some non-ASCII characters
-        out = codecs.open(options.check, 'w', 'utf-16')
-        write_words(out, unknown)
-
-
-def write_words(out, unknown):
-    """writes unknown words to file (in a specified encoding)"""
-
-    for w in unknown:
-        out.write(w)
-        if unknown[w]:
-            out.write('\t')
-            ## put suggested transcription(s) for truncated word into second column, if present:
-            if unknown[w][0]:
-                 out.write(','.join([' '.join(i) for i in unknown[w][0]]))
-            out.write('\t')
-            ## put following clue word in third column, if present:
-            if unknown[w][1]:
-                out.write(unknown[w][1])
-            ## put line in fourth column:
-            out.write('\t' + unknown[w][2])
-        out.write('\n')
-    out.close()
-
 
 
 ################################################################################
@@ -1491,21 +1020,21 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
     global times
     times = []
     mark_time("start")
-    
+
     ## positional arguments should be soundfile, transcription file, and TextGrid file
     ## (checking that the options are valid is handled by the parser)
     (wavfile, trsfile, tgfile) = check_arguments(args)
     ## (returned values are the full paths!)
-    
+
     ## read CMU dictionary
     ## (default location is "/model/dict", unless specified otherwise via the "--dict" option)
     global cmudict
     cmudict = read_dict(os.path.join(FADIR, options.dict))
- 
+
     ## add transcriptions from import file to dictionary, if applicable
     if options.importfile:
         add_dictionary_entries(options.importfile, FADIR)
-            
+
     ## read transcription file
     all_input = read_transcription_file(trsfile)
     if options.verbose:
@@ -1517,7 +1046,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
     global count_uncertain
     global count_unclear
     global style_tier
-        
+
     count_chunks = 0
     count_words = 0
     count_uncertain = 0
@@ -1529,7 +1058,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
 
     ## check correct format of input file; get list of transcription lines
     ## (this function skips empty annotation units -> lines to be deleted)
-    if options.verbose:  
+    if options.verbose:
         print "Checking format of input transcription file..."
     trans_lines, delete_lines = check_transcription_file(all_input)
 
@@ -1538,7 +1067,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
     ## NOTE:    If the "check transcription" option is selected,
     ##          the list of unknown words will be output to file
     ##          -> END OF PROGRAM!!!
-    if options.verbose:  
+    if options.verbose:
         print "Checking dictionary entries for all words in the input transcription..."
     trans_lines = check_dictionary_entries(trans_lines, wavfile)
     if not trans_lines and not __name__ == "__main__":
@@ -1547,15 +1076,15 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
     ## make temporary directory for sound "chunks" and output of FA program
     #make_tempdir(tempdir)
     check_tempdir(tempdir)
-    #if options.verbose:  
+    #if options.verbose:
     #    print "Checked temporary directory %s." % tempdir
 
     ## generate main TextGrid and get overall duration of main sound file
     main_textgrid = praat.TextGrid()
-    if options.verbose:  
+    if options.verbose:
         print "Generated main TextGrid."
     duration = get_duration(wavfile, FADIR)
-    if options.verbose:  
+    if options.verbose:
         print "Duration of sound file:  %f seconds." % duration
 
     ## delete empty lines from array of original transcription lines
@@ -1596,20 +1125,20 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
             print "\tWARNING!  Annotation unit too short (%s s) - no alignment possible." % dur
             print "\tSkipping alignment for annotation unit ", " ".join(text).encode('ascii', 'replace')
             continue
-            
+
         ## call SoX to cut the corresponding chunk out of the sound file
         chunkname_sound = "_".join([os.path.splitext(os.path.basename(wavfile))[0], speaker.replace(" ", "_"), "chunk", str(count_chunks)]) + ".wav"
         cut_chunk(wavfile, os.path.join(tempdir, chunkname_sound), beg, dur, SOXPATH)
         ## generate name for output TextGrid
         chunkname_textgrid = os.path.splitext(chunkname_sound)[0] + ".TextGrid"
-                    
+
         ## align chunk
         try:
             align(os.path.join(tempdir, chunkname_sound), [text], os.path.join(tempdir, chunkname_textgrid), FADIR, SOXPATH, HTKTOOLSPATH)
         except Exception, e:
             try:
                 print "\tERROR!  Alignment failed for chunk %i (speaker %s, text %s)." % (count_chunks, speaker, " ".join(text))
-            except (UnicodeDecodeError, UnicodeEncodeError): 
+            except (UnicodeDecodeError, UnicodeEncodeError):
                 print "\tERROR!  Alignment failed for chunk %i (speaker %s, text %s)." % (count_chunks, speaker, " ".join(text).encode('ascii', 'replace'))
             print "\n", traceback.format_exc(), "\n"
             print "\tContinuing alignment..."
@@ -1618,7 +1147,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
             os.remove(os.path.join(tempdir, chunkname_sound))
             os.remove(os.path.join(tempdir, chunkname_textgrid))
             continue
-           
+
         ## read TextGrid output of forced alignment
         new_textgrid = praat.TextGrid()
         new_textgrid.read(os.path.join(tempdir, chunkname_textgrid))
@@ -1635,9 +1164,9 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
         ## remove sound "chunk" and TextGrid from tempdir
         os.remove(os.path.join(tempdir, chunkname_sound))
         os.remove(os.path.join(tempdir, chunkname_textgrid))
-        
+
         mark_time(str(count_chunks))
-        
+
     ## add style tier to main TextGrid, if applicable
     if style_tier:
         main_textgrid.append(style_tier)
@@ -1665,7 +1194,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
     os.remove(temp_dict)
     if options.verbose:
         print "Deleted temporary copy of the CMU dictionary."
-    
+
     ## write log file
     t_stamp = write_log(os.path.splitext(wavfile)[0] + ".FAAVlog", wavfile, duration)
     if options.verbose:
@@ -1677,11 +1206,9 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
 ################################################################################
 
 if __name__ == '__main__':
-        
+
     ## get input/output file names and options
     parser = define_options_and_arguments()
     (opts, args) = parser.parse_args()
 
     FAAValign(opts, args)
-
-
