@@ -1,3 +1,6 @@
+import re
+import os
+import logging
 
 class TranscriptProcesor():
 	start_uncertain = re.compile(r'(\(\()')                 ## beginning of uncertain transcription
@@ -10,22 +13,41 @@ class TranscriptProcesor():
 	##        (i.e. uncertain/unclear transcription spans MUST be enclosed in DOUBLE parentheses)
 	unclear = re.compile(r'\(\(\s*\)\)')                    ## unclear transcription (empty double parentheses)
 
-	def __init__(self, pronunciation_dictionary, check=False):
+	def __init__(
+		self,
+		transript_file,
+		pronunciation_dictionary,
+		*args,
+		**kwargs
+	):
 		## "flag_uncertain" indicates whether we are currently inside an uncertain section of transcription
-	    ## (switched on and off by the beginning or end of double parentheses:  "((", "))")
+		## (switched on and off by the beginning or end of double parentheses:  "((", "))")
 		self.logger = logging.getLogger(__name__)
 		slef.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
-	    self.flag_uncertain = False
-	    self.last_beg_uncertain = ''
-	    self.last_end_uncertain = ''
-		self.check = check
+		self.file = transript_file
+		self.__config_flags( self, *args, **kwargs )
+
+		self.flag_uncertain = False
+		self.last_beg_uncertain = ''
+		self.last_end_uncertain = ''
 		self.temp_dict_dir = None
 		if not isinstance(pronunciation_dictionary,'CMU_Dictionary'):
 			raise ValueError('pronunciation_dictionary must be a CMU_Dictionary object')
 		self.dictionary = pronunciation_dictionary
 
-	def check_dictionary_entries(self, transcript_lines, wavfile):
+	def __config_flags( self, *args, **kwargs ):
+		self.verbose = False
+		self.prompt = False
+		self.check = False
+		if kwargs['verbose']:
+			self.verbose = kwargs['verbose']
+		if kwargs['prompt']:
+			self.prompt = kwargs['prompt']
+		if kwargs['check']:
+			self.check = kwargs['check']
+
+	def check_dictionary_entries(self, wavfile):
 		"""checks that all words in lines have an entry in the CMU dictionary;
 		if not, prompts user for Arpabet transcription and adds it to the dict file.
 		If "check transcription" option is selected, writes list of unknown words to file and exits."""
@@ -37,7 +59,7 @@ class TranscriptProcesor():
 		newlines = []
 		unknown = {}
 
-		for line in transcript_lines:
+		for line in self.trans_lines:
 			newwords = []
 			## get list of preprocessed words in each line
 			## This may lead to a race condition -CB
@@ -76,7 +98,7 @@ class TranscriptProcesor():
 		## "CHECK TRANSCRIPTION" OPTION:
 		## write list of unknown words and suggested transcriptions for truncated words to file
 		if self.check:
-			self.write_unknown_words(unknown)
+			self.dictionary_write_unknown_words(unknown)
 			print "Written list of unknown words in transcription to file %s." % options.check
 			if __name__ == "__main__":
 				sys.exit()
@@ -84,7 +106,7 @@ class TranscriptProcesor():
 		## CONTINUE TO ALIGNMENT:
 		else:
 			## return new transcription (list of lists of words, for each line)
-			return newlines
+			self.trans_lines = newlines
 
 	def preprocess_transcription(self, line):
 		"""preprocesses transcription input for CMU dictionary lookup and forced alignment"""
@@ -153,12 +175,55 @@ class TranscriptProcesor():
 
 		return newwords
 
-	def write_unknown_words(self, unknown):
-	    """writes the list of unknown words to file"""
-	        ## try ASCII output first:
-	    try:
-	        out = open(options.check, 'w')
-	        write_words(out, unknown)
-	    except UnicodeEncodeError:  ## encountered some non-ASCII characters
-	        out = codecs.open(options.check, 'w', 'utf-16')
-	        write_words(out, unknown)
+	def read_transcription_file(self):
+		with open(self.trsfile) as f:
+			lines = self.replace_smart_quotes(f.readlines())
+		self.lines = lines
+
+	# substitute any 'smart' quotes in the input file with the corresponding
+	# ASCII equivalents (otherwise they will be excluded as out-of-
+	# vocabulary with respect to the CMU pronouncing dictionary)
+	# WARNING: this function currently only works for UTF-8 input
+	def replace_smart_quotes(self, all_input):
+		cleaned_lines = []
+		for line in all_input:
+			line = line.replace(u'\u2018', "'")
+			line = line.replace(u'\u2019', "'")
+			line = line.replace(u'\u201a', "'")
+			line = line.replace(u'\u201b', "'")
+			line = line.replace(u'\u201c', '"')
+			line = line.replace(u'\u201d', '"')
+			line = line.replace(u'\u201e', '"')
+			line = line.replace(u'\u201f', '"')
+			cleaned_lines.append(line)
+		return cleaned_lines
+
+	def check_transcription_file(self):
+		"""checks the format of the input transcription file and returns a list of empty lines to be deleted from the input"""
+		all_input = self.lines
+		trans_lines = []
+		delete_lines = []
+		for line in all_input:
+			t_entries, d_line = self.check_transcription_format(line)
+			if t_entries:
+				trans_lines.append(t_entries[4])
+			if d_line:
+				delete_lines.append(d_line)
+		self.trans_lines = trans_lines
+		self.delete_lines = delete_lines
+
+	def check_transcription_format(self, line):
+		"""checks that input format of transcription file is correct (5 tab-delimited data fields)"""
+		## INPUT:  string line = line of transcription file
+		## OUTPUT: list entries = fields in line (speaker ID and name, begin and end times, transcription text)
+		##		 string line = empty transcription line to be deleted
+
+		if line.strip() == '':
+			return None, line
+
+		entries = line.rstrip().split('\t')
+		if len(entries) != 5:
+			error = "Incorrect format of transcription file: %i entries per line in line %s." % (len(entries), line.rstrip())
+		   	raise ValueError(error)
+		else:
+			return entries, None

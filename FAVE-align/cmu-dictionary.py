@@ -1,11 +1,16 @@
+import re
+import os
 import logging
 
 class CMU_Dictionary():
+	truncated = re.compile(r'\w+\-$')                       ## truncated words
+	intended = re.compile(r'^\+\w+')                        ## intended word (inserted by transcribers after truncated word)
+	ing = re.compile(r"IN'$")                               ## words ending in "in'"
 	CONSONANTS = ['B', 'CH', 'D', 'DH','F', 'G', 'HH', 'JH', 'K', 'L', 'M', 'N', 'NG', 'P', 'R', 'S', 'SH', 'T', 'TH', 'V', 'W', 'Y', 'Z', 'ZH']
 	VOWELS = ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 'IH', 'IY', 'OW', 'OY', 'UH', 'UW']
 	DICT_ADDITIONS = "added_dict_entries.txt"               ## file for collecting uploaded additions to the dictionary
 
-	def __init__(self, dictionary_file, verbose=False, prompt=False):
+	def __init__(self, dictionary_file, *args, **kwargs):
 		"""
 		Initializes object by reading in CMU dictionary (or similar)
 
@@ -15,11 +20,10 @@ class CMU_Dictionary():
 		@author Keelan Evanini
 		@author Christian Brickhouse
 		"""
-		self.verbose = verbose
-		self.prompt = prompt
-
 		self.logger = logging.getLogger(__name__)
 		slef.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+
+		self.__config_flags( *args, **kwargs )
 
 		self.cmu_dict = self.read(dictionary_file)
 		## check that cmudict has entries
@@ -27,6 +31,17 @@ class CMU_Dictionary():
 			self.logger.warning('Dictionary %s is empty' % dictionary_file)
 	    if verbose:
 	        self.logger.debug("Read dictionary from file %s" % dictionary_file)
+
+	def __config_flags( self, *args, **kwargs ):
+		self.verbose = False
+		self.prompt = False
+		self.check = False
+		if kwargs['verbose']:
+			self.verbose = kwargs['verbose']
+		if kwargs['prompt']:
+			self.prompt = kwargs['prompt']
+		if kwargs['check']:
+			self.check = kwargs['check']
 
 	def read(self,dictionary_file):
 		"""
@@ -149,26 +164,6 @@ class CMU_Dictionary():
 		else:
 			raise ValueError("Unknown phone %s (at position %i) in word %s!\n" % (p, i+1, w))
 
-
-
-	# substitute any 'smart' quotes in the input file with the corresponding
-	# ASCII equivalents (otherwise they will be excluded as out-of-
-	# vocabulary with respect to the CMU pronouncing dictionary)
-	# WARNING: this function currently only works for UTF-8 input
-	def replace_smart_quotes(all_input):
-	  cleaned_lines = []
-	  for line in all_input:
-	    line = line.replace(u'\u2018', "'")
-	    line = line.replace(u'\u2019', "'")
-	    line = line.replace(u'\u201a', "'")
-	    line = line.replace(u'\u201b', "'")
-	    line = line.replace(u'\u201c', '"')
-	    line = line.replace(u'\u201d', '"')
-	    line = line.replace(u'\u201e', '"')
-	    line = line.replace(u'\u201f', '"')
-	    cleaned_lines.append(line)
-	  return cleaned_lines
-
 	def check_word(word, next_word='', unknown={}, line=''):
 	    """checks whether a given word's phonetic transcription is in the CMU dictionary;
 	    adds the transcription to the dictionary if not"""
@@ -178,15 +173,15 @@ class CMU_Dictionary():
 	    ## OUTPUT:
 	    ## dict unknown = unknown or truncated words (needed if "check transcription" option is selected; remains empty otherwise)
 	    ## - modifies CMU dictionary (dict cmudict)
-	    global cmudict
+	    cmudict = self.cmu_dict
 
 	    clue = ''
 
 	    ## dictionary entry for truncated words may exist but not be correct for the current word
 	    ## (check first because word will be in CMU dictionary after procedure below)
-	    if truncated.search(word) and word in cmudict:
+	    if self.truncated.search(word) and word in cmudict:
 	        ## check whether following word is "clue" word?
-	        if intended.search(next_word):
+	        if self.intended.search(next_word):
 	            clue = next_word
 	        ## do not prompt user for input if "check transcription" option is selected
 	        ## add truncated word together with its proposed transcription to list of unknown words
@@ -211,12 +206,12 @@ class CMU_Dictionary():
 
 	    elif word not in cmudict and word not in STYLE_ENTRIES:
 	        ## truncated words:
-	        if truncated.search(word):
+	        if self.truncated.search(word):
 	            ## is following word "clue" word?  (starts with "+")
-	            if intended.search(next_word):
+	            if self.intended.search(next_word):
 	                clue = next_word
 	        ## don't do anything if word itself is a clue word
-	        elif intended.search(word):
+		elif self.intended.search(word):
 	            return unknown
 	        ## don't do anything for unclear transcriptions:
 	        elif word == '((xxxx))':
@@ -238,8 +233,8 @@ class CMU_Dictionary():
 	            check_word(word[1:], '', unknown, line)
 	            return unknown
 	        ## generate new entries for "-in'" words
-	        if ing.search(word):
-	            gword = ing.sub("ING", word)
+	        if self.ing.search(word):
+	            gword = self.ing.sub("ING", word)
 	            ## if word has entry/entries for corresponding "-ing" form:
 	            if gword in cmudict:
 	                for t in cmudict[gword]:
@@ -271,7 +266,7 @@ class CMU_Dictionary():
 
 	    return unknown
 
-	def merge_dicts(d1, d2):
+	def merge_dicts(self, d1, d2):
 	    """merges two versions of the CMU pronouncing dictionary"""
 	    ## for each word, each transcription in d2, check if present in d1
 	    for word in d2:
@@ -285,47 +280,47 @@ class CMU_Dictionary():
 	                    d1[word].append(t)
 	    return d1
 
-	def write_dict(f, dictionary="cmudict", mode='w'):
+	def write_dict(self, fname, dictionary=None):
 	    """writes the new version of the CMU dictionary (or any other dictionary) to file"""
 
 	    ## default functionality is to write the CMU pronunciation dictionary back to file,
 	    ## but other dictionaries or parts of dictionaries can also be written/appended
-	    if dictionary == "cmudict":
-	        dictionary = cmudict
-	#        print "dictionary is cmudict"
-	    out = open(f, mode)
+	    if not dictionary:
+	        dictionary = self.cmu_dict
+		out_string = ''
 	    ## sort dictionary before writing to file
-	    s = dictionary.keys()
-	    s.sort()
-	    for w in s:
+	    keys = dictionary.keys()
+	    keys.sort()
+	    for word in keys:
 	        ## make a separate entry for each pronunciation in case of alternative entries
-	        for t in dictionary[w]:
-	            if t:
-	                out.write(w + '  ')     ## two spaces separating CMU dict entries from phonetic transcriptions
-	                for p in t:
-	                    out.write(p + ' ')  ## list of phones, separated by spaces
-	                out.write('\n')         ## end of entry line
-	    out.close()
-	#    if options.verbose:
-	#        print "Written pronunciation dictionary to file."
+			if len(dictionary[word]) < 1:
+				continue
+	        for transcription in dictionary[word]:
+	                out_string += word + '  '     ## two spaces separating CMU dict entries from phonetic transcriptions
+	                for phone in transcription:
+	                    out_string += phone + ' '  ## list of phones, separated by spaces
+	                out_string += '\n'         ## end of entry line
 
+		with open(fname,'w') as f:
+			f.write(out_string)
 
-
-	def write_words(out, unknown):
+	def _write_words(self, unknown):
 	    """writes unknown words to file (in a specified encoding)"""
-
+		out_string = ''
 	    for w in unknown:
-	        out.write(w)
-	        if unknown[w]:
-	            out.write('\t')
-	            ## put suggested transcription(s) for truncated word into second column, if present:
-	            if unknown[w][0]:
-	                 out.write(','.join([' '.join(i) for i in unknown[w][0]]))
-	            out.write('\t')
-	            ## put following clue word in third column, if present:
-	            if unknown[w][1]:
-	                out.write(unknown[w][1])
-	            ## put line in fourth column:
-	            out.write('\t' + unknown[w][2])
-	        out.write('\n')
-	    out.close()
+	        out_string += w + '\t'
+	        if unknown[w][0]:
+				## put suggested transcription(s) for truncated word into second column, if present:
+				out_string += ','.join([' '.join(i) for i in unknown[w][0]])
+			out_string += '\t'
+			if unknown[w][1]:
+				## put following clue word in third column, if present:
+				out_string += unknown[w][1]
+			## put line in fourth column:
+			out_string += '\t' + unknown[w][2] + '\n'
+		return out_string
+
+	def write_unknown_words(self, unknown, fname="unknown.txt"):
+		"""writes the list of unknown words to file"""
+		with open(fname,'w') as f:
+			self._write_words(unknown)
