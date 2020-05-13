@@ -84,7 +84,7 @@ import string
 
 
 
-STYLE_ENTRIES = ["R", "N", "L", "G", "S", "K", "T", "C", "WL", "MP", "SD", "RP"]
+
 
 #TEMPDIR = "temp_FA"
 TEMPDIR = ""
