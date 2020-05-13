@@ -25,6 +25,7 @@ class CMU_Dictionary():
 
 		self.__config_flags( *args, **kwargs )
 
+		self.dict_dir = dictionary_file
 		self.cmu_dict = self.read(dictionary_file)
 		## check that cmudict has entries
 	    if len(self.cmu_dict) == 0:

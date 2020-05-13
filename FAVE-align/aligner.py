@@ -32,6 +32,7 @@ import os  # replace with subprocess one day
 import re
 import subprocess
 import shutil
+import time
 import logging
 import wave
 import transcriptprocessor
@@ -247,25 +248,31 @@ class Aligner():
             # remove sound "chunk" and TextGrid from tempdir
             os.remove(os.path.join(tempdir, chunkname_sound))
             os.remove(os.path.join(tempdir, chunkname_textgrid))
-        self.__cleanup(style_tier, main_textgrid, failed_alignment)
+        counts = [
+            self.count_words,
+            self.count_uncertain,
+            self.count_unclear,
+            count_chunks
+        ]
+        self.__cleanup(style_tier, main_textgrid, failed_alignment, duration, counts)
 
-    def __cleanup(self, style_tier, main_textgrid, failed_alignment):
+    def __cleanup(self, style_tier, main_textgrid, failed_alignment, duration, counts):
         # add style tier to main TextGrid, if applicable
         if style_tier:
             main_textgrid.append(style_tier)
 
         # tidy up main TextGrid (extend durations, insert empty intervals etc.)
-        main_textgrid = self.__tidyup(main_textgrid, 0, duration, tgfile)
+        main_textgrid = self.__tidyup(main_textgrid, 0, duration)
 
         # append information on alignment failure to errorlog file
         if failed_alignment:
-            self.__write_alignment_errors_to_log(tgfile, failed_alignment)
+            self.__write_alignment_errors_to_log(self.textgrid, failed_alignment)
 
         # write main TextGrid to file
         main_textgrid.write(self.textgrid)
         self.logger.debug(
             "Successfully written TextGrid %s to file." %
-            os.path.basename(tgfile))
+            os.path.basename(self.textgrid))
 
         # delete temporary transcription files and "chunk" sound file/temp directory
         # remove_tempdir(tempdir)
@@ -279,14 +286,15 @@ class Aligner():
         # remove temporary CMU dictionary
         os.remove(self.transcript.temp_dict_dir)
         self.logger.debug("Deleted temporary copy of the CMU dictionary.")
-
+        wavfile = self.audio
         # write log file
         t_stamp = self.__write_log(
             os.path.splitext(wavfile)[0] +
             ".FAAVlog",
             wavfile,
-            duration)
-        sel.logger.debug(
+            duration,
+            counts)
+        self.logger.debug(
             "Written log file %s." %
             os.path.basename(
                 os.path.splitext(wavfile)[0] +
@@ -424,7 +432,7 @@ class Aligner():
                     '/aligned' +
                     identifier +
                     '.mlf -p 0.0 -s 5.0 ' +
-                    options.dict +
+                    self.cmu_dict.dict_dir +
                     ' ./model/monophones > ./tmp' +
                     identifier +
                     '/aligned' +
@@ -459,7 +467,7 @@ class Aligner():
                     '/aligned' +
                     identifier +
                     '.mlf -p 0.0 -s 5.0 ' +
-                    options.dict +
+                    self.cmu_dict.dict_dir +
                     ' ./model/monophones > ./tmp' +
                     identifier +
                     '/aligned' +
@@ -795,8 +803,13 @@ class Aligner():
 
         return style_tier
 
-    def __write_log(self, filename, wavfile, duration):
+    def __write_log(self, filename, wavfile, duration, counts):
         """writes a log file on alignment statistics"""
+
+        count_words = counts[0]
+        count_uncertain = counts[1]
+        count_unclear = counts[2]
+        count_chunks = counts[3]
 
         f = open(filename, 'w')
         t_stamp = time.asctime()
@@ -845,6 +858,9 @@ class Aligner():
         f.write("\n")
         f.write("Number of breath groups aligned:\t%i\n" % count_chunks)
         f.write("Duration of sound file:\t\t\t%.3f seconds\n" % duration)
+        # The following is timing data that should be reinserted but is not
+        #   critical to port right now.
+        """
         f.write("Total time for alignment:\t\t%.2f seconds\n" %
                 (times[-1][2] - times[1][2]))
         f.write("Total time since beginning of program:\t%.2f seconds\n\n" %
@@ -869,6 +885,7 @@ class Aligner():
                 f.write("\t")
                 f.write(str(round(times[i][2] - times[i - 1][2], 3)))
             f.write("\n")
+        """
         f.close()
 
         return t_stamp
@@ -898,7 +915,7 @@ class Aligner():
         errorlog.close()
         self.logger.info("Alignment errors saved to file %s." % logname)
 
-    def __tidyup(self, tg, beg, end, tgfile):
+    def __tidyup(self, tg, beg, end):
         """extends the duration of a TextGrid and all its tiers from beg to end;
         inserts empty/"SP" intervals; checks for overlapping intervals"""
 
@@ -919,14 +936,15 @@ class Aligner():
         # write errorlog if overlapping intervals detected
         if len(overlaps) != 0:
             self.logger.warning("Overlapping intervals detected!")
-            self.__write_errorlog(overlaps, tgfile)
+            self.__write_errorlog(overlaps)
 
         return tg
 
-    def __write_errorlog(self, overlaps, tgfile):
+    def __write_errorlog(self, overlaps):
         """writes log file with details on overlapping interval boundaries to file"""
 
         # write log file for overlapping intervals from FA
+        tgfile = self.textgrid
         logname = os.path.splitext(tgfile)[0] + ".errorlog"
         errorlog = open(logname, 'w')
         errorlog.write("Overlapping intervals in file %s:  \n" % tgfile)
