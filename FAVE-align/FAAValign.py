@@ -83,7 +83,7 @@ import subprocess
 import string
 
 
-STYLE = ["style", "Style", "STYLE"]
+
 STYLE_ENTRIES = ["R", "N", "L", "G", "S", "K", "T", "C", "WL", "MP", "SD", "RP"]
 
 #TEMPDIR = "temp_FA"
@@ -93,153 +93,10 @@ PRAATPATH = "/usr/local/bin/praat"					  ## this is just in case the wave module
 
 ################################################################################
 
-## This was the main body of Jiahong Yuan's original align.py
-def align(wavfile, trs_input, outfile, FADIR='', SOXPATH='', HTKTOOLSPATH=''):
-	"""calls the forced aligner"""
-	## wavfile = sound file to be aligned
-	## trsfile = corresponding transcription file
-	## outfile = output TextGrid
-
-	## change to Forced Alignment Toolkit directory for all the temp and preparation files
-	if FADIR:
-		os.chdir(FADIR)
-
-	## derive unique identifier for tmp directory and all its file (from name of the sound "chunk")
-	identifier = re.sub(r'\W|_|chunk', '', os.path.splitext(os.path.split(wavfile)[1])[0])
-	## old names:  --> will have identifier added
-	## - "tmp"
-	## - "aligned.mlf"
-	## - "aligned.results"
-	## - "codetr.scp"
-	## - "test.scp"
-	## - "tmp.mlf"
-	## - "tmp.plp"
-	## - "tmp.wav"
-
-	# create working directory
-	os.mkdir("./tmp" + identifier)
-	# prepare wavefile
-	SR = prep_wav(wavfile, './tmp' + identifier + '/tmp' + identifier + '.wav', SOXPATH)
-
-	# prepare mlfile
-	prep_mlf(trs_input, './tmp' + identifier + '/tmp' + identifier + '.mlf', identifier)
-
-	# prepare scp files
-	fw = open('./tmp' + identifier + '/codetr' + identifier + '.scp', 'w')
-	fw.write('./tmp' + identifier + '/tmp' + identifier + '.wav ./tmp' + identifier + '/tmp'+ identifier + '.plp\n')
-	fw.close()
-	fw = open('./tmp' + identifier + '/test' + identifier + '.scp', 'w')
-	fw.write('./tmp' + identifier +'/tmp' + identifier + '.plp\n')
-	fw.close()
-
-	try:
-		# call plp.sh and align.sh
-		if HTKTOOLSPATH:  ## if absolute path to HTK Toolkit is given
-			os.system(os.path.join(HTKTOOLSPATH, 'HCopy') + ' -T 1 -C ./model/' + str(SR) + '/config -S ./tmp' + identifier + '/codetr' + identifier + '.scp >> ./tmp' + identifier + '/blubbeldiblubb.txt')
-			os.system(os.path.join(HTKTOOLSPATH, 'HVite') + ' -T 1 -a -m -I ./tmp' + identifier + '/tmp' + identifier +'.mlf -H ./model/' + str(SR) + '/macros -H ./model/' + str(SR) + '/hmmdefs  -S ./tmp' + identifier + '/test' + identifier+ '.scp -i ./tmp' + identifier + '/aligned' + identifier + '.mlf -p 0.0 -s 5.0 ' + options.dict + ' ./model/monophones > ./tmp' + identifier + '/aligned' + identifier + '.results')
-		else:  ## find path via shell
-			#os.system('HCopy -T 1 -C ./model/' + str(SR) + '/config -S ./tmp/codetr.scp >> blubbeldiblubb.txt')
-			#os.system('HVite -T 1 -a -m -I ./tmp/tmp.mlf -H ./model/' + str(SR) + '/macros -H ./model/' + str(SR) + '/hmmdefs  -S ./tmp/test.scp -i ./tmp/aligned.mlf -p 0.0 -s 5.0 ' + options.dict + ' ./model/monophones > ./tmp/aligned.results')
-			os.system('HCopy -T 1 -C ./model/' + str(SR) + '/config -S ./tmp' + identifier + '/codetr' + identifier + '.scp >> ./tmp' + identifier + '/blubbeldiblubb.txt')
-			os.system('HVite -T 1 -a -m -I ./tmp' + identifier + '/tmp' + identifier +'.mlf -H ./model/' + str(SR) + '/macros -H ./model/' + str(SR) + '/hmmdefs  -S ./tmp' + identifier + '/test' + identifier+ '.scp -i ./tmp' + identifier + '/aligned' + identifier + '.mlf -p 0.0 -s 5.0 ' + options.dict + ' ./model/monophones > ./tmp' + identifier + '/aligned' + identifier + '.results')
-
-		## write result of alignment to TextGrid file
-		aligned_to_TextGrid('./tmp' + identifier + '/aligned' + identifier + '.mlf', outfile, SR)
-		if options.verbose:
-			print "\tForced alignment called successfully for file %s." % os.path.basename(wavfile)
-	except Exception, e:
-		FA_error = "Error in aligning file %s:  %s." % (os.path.basename(wavfile), e)
-		## clean up temporary alignment files
-		shutil.rmtree("./tmp" + identifier)
-		raise Exception, FA_error
-		##errorhandler(FA_error)
-
-	## remove tmp directory and all files
-	shutil.rmtree("./tmp" + identifier)
 
 
-## This function is from Jiahong Yuan's align.py
-## (originally called "TextGrid(infile, outfile, SR)")
-def aligned_to_TextGrid(infile, outfile, SR):
-	"""writes the results of the forced alignment (file "aligned.mlf") to file as a Praat TextGrid file"""
 
-	f = open(infile, 'rU')
-	lines = f.readlines()
-	f.close()
-	fw = open(outfile, 'w')
-	j = 2
-	phons = []
-	wrds = []
-##	try:
-	while (lines[j] <> '.\n'):
-		ph = lines[j].split()[2]  ## phone
-		if (SR == 11025):  ## adjust rounding error for 11,025 Hz sampling rate
-			## convert time stamps from 100ns units to seconds
-			## fix overlapping intervals:  divide time stamp by ten first and round!
-			st = round((round(float(lines[j].split()[0])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)  ## start time
-			en = round((round(float(lines[j].split()[1])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)  ## end time
-		else:
-			st = round(round(float(lines[j].split()[0])/10.0, 0)/1000000.0 + 0.0125, 3)
-			en = round(round(float(lines[j].split()[1])/10.0, 0)/1000000.0 + 0.0125, 3)
-		if (st <> en):  ## 'sp' states between words can have zero duration
-			phons.append([ph, st, en])  ## list of phones with start and end times in seconds
 
-		if (len(lines[j].split()) == 5):  ## entry on word tier
-			wrd = lines[j].split()[4].replace('\n', '')
-			if (SR == 11025):
-				st = round((round(float(lines[j].split()[0])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)
-				en = round((round(float(lines[j].split()[1])/10.0, 0)/1000000.0)*(11000.0/11025.0) + 0.0125, 3)
-			else:
-				st = round(round(float(lines[j].split()[0])/10.0, 0)/1000000.0 + 0.0125, 3)
-				en = round(round(float(lines[j].split()[1])/10.0, 0)/1000000.0 + 0.0125, 3)
-			if (st <> en):
-				wrds.append([wrd, st, en])
-
-		j += 1
-##	except Exception, e:
-##		FA_error = "Error in converting times from file %s in line %d for TextGrid %s:  %s." % (os.path.basename(infile), j + 1, os.path.basename(outfile), e)
-##		errorhandler(FA_error)
-
-##	try:
-	#write the phone interval tier
-	fw.write('File type = "ooTextFile short"\n')
-	fw.write('"TextGrid"\n')
-	fw.write('\n')
-	fw.write(str(phons[0][1]) + '\n')
-	fw.write(str(phons[-1][2]) + '\n')
-	fw.write('<exists>\n')
-	fw.write('2\n')
-	fw.write('"IntervalTier"\n')
-	fw.write('"phone"\n')
-	fw.write(str(phons[0][1]) + '\n')
-	fw.write(str(phons[-1][-1]) + '\n')
-	fw.write(str(len(phons)) + '\n')
-	for k in range(len(phons)):
-		fw.write(str(phons[k][1]) + '\n')
-		fw.write(str(phons[k][2]) + '\n')
-		fw.write('"' + phons[k][0] + '"' + '\n')
-##	except Exception, e:
-##		FA_error = "Error in writing phone interval tier for TextGrid %s:  %s." % (os.path.basename(outfile), e)
-##		errorhandler(FA_error)
-##	try:
-	#write the word interval tier
-	fw.write('"IntervalTier"\n')
-	fw.write('"word"\n')
-	fw.write(str(phons[0][1]) + '\n')
-	fw.write(str(phons[-1][-1]) + '\n')
-	fw.write(str(len(wrds)) + '\n')
-	for k in range(len(wrds) - 1):
-		fw.write(str(wrds[k][1]) + '\n')
-		fw.write(str(wrds[k+1][1]) + '\n')
-		fw.write('"' + wrds[k][0] + '"' + '\n')
-	fw.write(str(wrds[-1][1]) + '\n')
-	fw.write(str(phons[-1][2]) + '\n')
-	fw.write('"' + wrds[-1][0] + '"' + '\n')
-##	except Exception, e:
-##		FA_error = "Error in writing phone interval tier for TextGrid %s:  %s." % (os.path.basename(outfile), e)
-##		errorhandler(FA_error)
-
-	fw.close()
 
 
 def check_arguments(args):
@@ -323,77 +180,8 @@ def check_file(path):
 			error = "ERROR!  File %s could not be found!" % path
 			errorhandler(error)
 
-def cut_chunk(wavfile, outfile, start, dur, SOXPATH):
-	"""uses SoX to cut a portion out of a sound file"""
-
-	if SOXPATH:
-		command_cut_sound = " ".join([SOXPATH, '\"' + wavfile + '\"', '\"' + outfile + '\"', "trim", str(start), str(dur)])
-		## ("sox <original sound file> "<new sound chunk>" trim <start of selection (in sec)> <duration of selection (in sec)>")
-		## (put file paths into quotation marks to accomodate special characters (spaces, parantheses etc.))
-	else:
-		command_cut_sound = " ".join(["sox", '\"' + wavfile + '\"', '\"' + outfile + '\"', "trim", str(start), str(dur)])
-	try:
-		os.system(command_cut_sound)
-		if options.verbose:
-			print "\tSound chunk %s successfully extracted." % (outfile) #os.path.basename(outfile)
-	except Exception, e:
-		sound_error = "Error in extracting sound chunk %s:  %s." % (os.path.basename(outfile), e)
-		errorhandler(sound_error)
 
 
-def define_options_and_arguments():
-	"""defines options and positional arguments for this program"""
-
-	use = """(python) %prog [options] soundfile.wav [transcription.txt] [output.TextGrid]"""
-	desc = """Aligns a sound file with the corresponding transcription text. The transcription text is split into annotation breath groups, which are fed individually as "chunks" to the forced aligner. All output is concatenated into a single Praat TextGrid file.
-
-	INPUT:
-	- sound file
-	- tab-delimited text file with the following columns:
-		first column:   speaker ID
-		second column:  speaker name
-		third column:   beginning of breath group (in seconds)
-		fourth column:  end of breath group (in seconds)
-		fifth column:   transcribed text
-	(If no name is specified for the transcription file, it will be assumed to have the same name as the sound file, plus ".txt" extension.)
-
-	OUTPUT:
-	- Praat TextGrid file with orthographic and phonemic transcription tiers for each speaker (If no name is specified, it will be given same name as the sound file, plus ".TextGrid" extension.)"""
-
-	ep = """The following additional programs need to be installed and in the path:
-	- Praat (on Windows machines, the command line version praatcon.exe)
-	- SoX"""
-
-	vers = """This is %prog, a new version of align.py, written by Jiahong Yuan, combining it with Ingrid Rosenfelder's front_end_FA.py and an interactive CMU dictionary check for all words in the transcription file.
-	Last modified May 14, 2010."""
-
-	new_use = format_option_text(use)
-	new_desc = format_option_text(desc)
-	new_ep = format_option_text(ep)
-
-	check_help = """Checks whether phonetic transcriptions for all words in the transcription file can be found in the CMU Pronouncing Dictionary.  Returns a list of unknown words (required argument "FILENAME")."""
-	import_help = """Adds a list of unknown words and their corresponding phonetic transcriptions to the CMU Pronouncing Dictionary prior to alignment.  User will be prompted interactively for the transcriptions of any remaining unknown words.  Required argument "FILENAME" must be tab-separated plain text file (one word - phonetic transcription pair per line)."""
-	verbose_help = """Detailed output on status of dictionary check and alignment progress."""
-	dict_help = """Specifies the name of the file containing the pronunciation dictionary.  Default file is "/model/dict"."""
-	noprompt_help = """User is not prompted for the transcription of words not in the dictionary, or truncated words.  Unknown words are ignored by the aligner."""
-	htktoolspath_help = """Specifies the path to the HTKTools directory where the HTK executable files are located.  If not specified, the user's path will be searched for the location of the executable."""
-
-	parser = optparse.OptionParser(usage=new_use, description=new_desc, epilog=new_ep, version=vers)
-	parser.add_option('-c', '--check', help=check_help, metavar='FILENAME')						## required argument FILENAME
-	parser.add_option('-i', '--import', help=import_help, metavar='FILENAME', dest='importfile')   ## required argument FILENAME
-	parser.add_option('-v', '--verbose', action='store_true', default=False, help=verbose_help)
-	parser.add_option('-d', '--dict', default='model/dict', help=dict_help, metavar='FILENAME')
-	parser.add_option('-n', '--noprompt', action='store_true', default=False, help=noprompt_help)
-	parser.add_option('-t', '--htktoolspath', default='', help=htktoolspath_help, metavar='HTKTOOLSPATH')
-
-	## After parsing with (options, args) = parser.parse_args(), options are accessible via
-	## - string options.check (default:  None)
-	## - string options.importfile (default:  None)
-	## - "bool" options.verbose (default:  False)
-	## - string options.dict (default:  "model/dict")
-	## - "bool" options.noprompt (default:  False)
-
-	return parser
 
 
 
@@ -520,116 +308,10 @@ def mark_time(index):
 	real_time = time.time()
 	times.append((index, cpu_time, real_time))
 
-def merge_textgrids(main_textgrid, new_textgrid, speaker, chunkname_textgrid):
-	"""adds the contents of TextGrid new_textgrid to TextGrid main_textgrid"""
-
-	for tier in new_textgrid:
-		## change tier names to reflect speaker names
-		## (output of FA program is "phone", "word" -> "Speaker - phone", "Speaker - word")
-		tier.rename(speaker + " - " + tier.name())
-		## check if tier already exists:
-		exists = False
-		for existing_tier in main_textgrid:
-			if tier.name() == existing_tier.name():
-				exists = True
-				break   ## need this so existing_tier retains its value!!!
-		if exists:
-			for interval in tier:
-				existing_tier.append(interval)
-		else:
-			main_textgrid.append(tier)
-	if options.verbose:
-		print "\tSuccessfully added", chunkname_textgrid, "to main TextGrid."
-
-	return main_textgrid
-
-## This function originally is from Jiahong Yuan's align.py
-## (very much modified by Ingrid...)
-def prep_mlf(transcription, mlffile, identifier):
-	"""writes transcription to the master label file for forced alignment"""
-	## INPUT:
-	## list transcription = list of list of (preprocessed) words
-	## string mlffile = name of master label file
-	## string identifier = unique identifier of process/sound file (can't just call everything "tmp")
-	## OUTPUT:
-	## none, but writes master label file to disk
-
-	fw = open(mlffile, 'w')
-	fw.write('#!MLF!#\n')
-	fw.write('"*/tmp' + identifier + '.lab"\n')
-	fw.write('sp\n')
-	for line in transcription:
-		for word in line:
-			## change unclear transcription ("((xxxx))") to noise
-			if word == "((xxxx))":
-				word = "{NS}"
-				global count_unclear
-				count_unclear += 1
-			## get rid of parentheses for uncertain transcription
-			if uncertain.search(word):
-				word = uncertain.sub(r'\1', word)
-				global count_uncertain
-				count_uncertain += 1
-			## delete initial asterisks
-			if word[0] == "*":
-				word = word[1:]
-			## check again that word is in CMU dictionary because of "noprompt" option,
-			## or because the user might select "skip" in interactive prompt
-			if word in cmudict:
-				fw.write(word + '\n')
-				fw.write('sp\n')
-				global count_words
-				count_words += 1
-			else:
-				print "\tWarning!  Word %s not in CMU dict!!!" % word.encode('ascii', 'replace')
-	fw.write('.\n')
-	fw.close()
 
 
-## This function is from Jiahong Yuan's align.py
-## (but adapted so that we're forcing a SR of 16,000 Hz; mono)
-def prep_wav(orig_wav, out_wav, SOXPATH=''):
-	"""adjusts sampling rate  and number of channels of sound file to 16,000 Hz, mono."""
-
-## NOTE:  the wave.py module may cause problems, so we'll just copy the file to 16,000 Hz mono no matter what the original file format!
-##	f = wave.open(orig_wav, 'r')
-##	SR = f.getframerate()
-##	channels = f.getnchannels()
-##	f.close()
-##	if not (SR == 16000 and channels == 1):  ## this is changed
-	SR = 16000
-##		#SR = 11025
-	if SOXPATH:  ## if FAAValign is used as a CGI script, the path to SoX needs to be specified explicitly
-		os.system(SOXPATH + ' \"' + orig_wav + '\" -c 1 -r 16000 ' + out_wav)
-	else:		## otherwise, rely on the shell to find the correct path
-		os.system("sox" + ' \"' + orig_wav + '\" -c 1 -r 16000 ' + out_wav)
-		#os.system("sox " + orig_wav + " -c 1 -r 11025 " + out_wav + " polyphase")
-##	else:
-##		os.system("cp -f " + '\"' + orig_wav + '\"' + " " + out_wav)
-
-	return SR
 
 
-def process_style_tier(entries, style_tier=None):
-	"""processes entries of style tier"""
-
-	## create new tier for style, if not already in existence
-	if not style_tier:
-		style_tier = praat.IntervalTier(name="style", xmin=0, xmax=0)
-		if options.verbose:
-			print "Processing style tier."
-	## add new interval on style tier
-	beg = round(float(entries[2]), 3)
-	end = round(float(entries[3]), 3)
-	text = entries[4].strip().upper()
-	## check that entry on style tier has one of the allowed values
-##	if text in STYLE_ENTRIES:
-	style_tier.append(praat.Interval(beg, end, text))
-##	else:
-##		error = "ERROR!  Invalid entry on style tier:  %s (interval %.2f - %.2f)" % (text, beg, end)
-##		errorhandler(error)
-
-	return style_tier
 
 
 def prompt_user(word, clue=''):
@@ -677,68 +359,7 @@ def read_transcription_file(trsfile):
 	return lines
 
 
-def reinsert_uncertain(tg, text):
-	"""compares the original transcription with the word tier of a TextGrid and
-	re-inserts markup for uncertain and unclear transcriptions"""
-	## INPUT:
-	## praat.TextGrid tg = TextGrid that was output by the forced aligner for this "chunk"
-	## list text = list of words that should correspond to entries on word tier of tg (original transcription WITH parentheses, asterisks etc.)
-	## OUTPUT:
-	## praat.TextGrid tg = TextGrid with original uncertain and unclear transcriptions
 
-	## forced alignment may or may not insert "sp" intervals between words
-	## -> make an index of "real" words and their index on the word tier of the TextGrid first
-	tgwords = []
-	for (n, interval) in enumerate(tg[1]):  ## word tier
-		if interval.mark() not in ["sp", "SP"]:
-			tgwords.append((interval.mark(), n))
-##	print "\t\ttgwords:  ", tgwords
-##	print "\t\ttext:  ", text
-
-	## for all "real" (non-"sp") words in transcription:
-	for (n, entry) in enumerate(tgwords):
-		tgword = entry[0]			   ## interval entry on word tier of FA output TextGrid
-		tgposition = entry[1]		   ## corresponding position of that word in the TextGrid tier
-
-		## if "noprompt" option is selected, or if the user chooses the "skip" option in the interactive prompt,
-		## forced alignment ignores unknown words & indexes will not match!
-		## -> count how many words have been ignored up to here and adjust n accordingly (n = n + ignored)
-		i = 0
-		while i <= n:
-			## (automatically generated "in'" entries will be in dict file by now,
-			## so only need to strip original word of uncertainty parentheses and asterisks)
-			if (uncertain.sub(r'\1', text[i]).lstrip('*') not in cmudict and text[i] != "((xxxx))"):
-				n += 1  ## !!! adjust n for every ignored word that is found !!!
-			i += 1
-
-		## original transcription contains unclear transcription:
-		if text[n] == "((xxxx))":
-			## corresponding interval in TextGrid must have "{NS}"
-			if tgword == "{NS}" and tg[1][tgposition].mark() == "{NS}":
-				tg[1][tgposition].change_text(text[n])
-			else:  ## This should not happen!
-				error = "ERROR!  Something went wrong in the substitution of unclear transcriptions for the forced alignment!"
-				errorhandler(error)
-
-		## original transcription contains uncertain transcription:
-		elif uncertain.search(text[n]):
-			## corresponding interval in TextGrid must have transcription without parentheses (and, if applicable, without asterisk)
-			if tgword == uncertain.sub(r'\1', text[n]).lstrip('*') and tg[1][tgposition].mark() == uncertain.sub(r'\1', text[n]).lstrip('*'):
-				tg[1][tgposition].change_text(text[n])
-			else:  ## This should not happen!
-				error = "ERROR!  Something went wrong in the substitution of uncertain transcriptions for the forced alignment!"
-				errorhandler(error)
-
-		## original transcription was asterisked word
-		elif text[n][0] == "*":
-			## corresponding interval in TextGrid must have transcription without the asterisk
-			if tgword == text[n].lstrip('*') and tg[1][tgposition].mark() == text[n].lstrip('*'):
-				tg[1][tgposition].change_text(text[n])
-			else:  ## This should not happen!
-				 error = "ERROR!  Something went wrong in the substitution of asterisked transcriptions for the forced alignment!"
-				 errorhandler(error)
-
-	return tg
 
 
 # def remove_tempdir(tempdir):
@@ -765,136 +386,14 @@ def replace_extension(filename, newextension):
 #	 os.remove("blubbeldiblubb.txt")
 
 
-def tidyup(tg, beg, end, tgfile):
-	"""extends the duration of a TextGrid and all its tiers from beg to end;
-	inserts empty/"SP" intervals; checks for overlapping intervals"""
-
-	## set overall duration of main TextGrid
-	tg.change_times(beg, end)
-	## set duration of all tiers and check for overlaps
-	overlaps = []
-	for t in tg:
-		## set duration of tier from 0 to overall duration of main sound file
-		t.extend(beg, end)
-		## insert entries for empty intervals between existing intervals
-		oops = t.tidyup()
-		if len(oops) != 0:
-			for oo in oops:
-				overlaps.append(oo)
-		if options.verbose:
-			print "Finished tidying up %s." % t
-	## write errorlog if overlapping intervals detected
-	if len(overlaps) != 0:
-		print "WARNING!  Overlapping intervals detected!"
-		write_errorlog(overlaps, tgfile)
-
-	return tg
 
 
-def write_errorlog(overlaps, tgfile):
-	"""writes log file with details on overlapping interval boundaries to file"""
-
-	## write log file for overlapping intervals from FA
-	logname = os.path.splitext(tgfile)[0] + ".errorlog"
-	errorlog = open(logname, 'w')
-	errorlog.write("Overlapping intervals in file %s:  \n" % tgfile)
-	for o in overlaps:
-		errorlog.write("Interval %s and interval %s on tier %s.\n" % (o[0], o[1], o[2]))
-	errorlog.close()
-	print "Error messages saved to file %s." % logname
 
 
-def write_alignment_errors_to_log(tgfile, failed_alignment):
-	"""appends the list of alignment failures to the error log"""
-
-	## warn user that alignment failed for some parts of the TextGrid
-	print "WARNING!  Alignment failed for some annotation units!"
-
-	logname = os.path.splitext(tgfile)[0] + ".errorlog"
-	## check whether errorlog file exists
-	if os.path.exists(logname) and os.path.isfile(logname):
-		errorlog = open(logname, 'a')
-		errorlog.write('\n')
-	else:
-		errorlog = open(logname, 'w')
-	errorlog.write("Alignment failed for the following annotation units:  \n")
-	errorlog.write("#\tbeginning\tend\tspeaker\ttext\n")
-	for f in failed_alignment:
-#		try:
-		errorlog.write('\t'.join(f).encode('ascii', 'replace'))
-#		except UnicodeDecodeError:
-#			errorlog.write('\t'.join(f))
-		errorlog.write('\n')
-	errorlog.close()
-	print "Alignment errors saved to file %s." % logname
 
 
-def write_log(filename, wavfile, duration):
-	"""writes a log file on alignment statistics"""
 
-	f = open(filename, 'w')
-	t_stamp = time.asctime()
-	f.write(t_stamp)
-	f.write("\n\n")
-	f.write("Alignment statistics for file %s:\n\n" % os.path.basename(wavfile))
 
-	try:
-		check_version = subprocess.Popen(["git","describe", "--tags"], stdout = subprocess.PIPE)
-		version,err = check_version.communicate()
-		version = version.rstrip()
-	except OSError:
-		version = None
-
-	if version:
-		f.write("version info from Git: %s"%version)
-		f.write("\n")
-	else:
-		f.write("Not using Git version control. Version info unavailable.\n")
-		f.write("Consider installing Git (http://git-scm.com/).\
-		 and cloning this repository from GitHub with: \n \
-		 git clone git@github.com:JoFrhwld/FAVE.git")
-		f.write("\n")
-
-	try:
-		check_changes = subprocess.Popen(["git", "diff", "--stat"], stdout = subprocess.PIPE)
-		changes, err = check_changes.communicate()
-	except OSError:
-		changes = None
-
-	if changes:
-		f.write("Uncommitted changes when run:\n")
-		f.write(changes)
-
-	f.write("\n")
-	f.write("Total number of words:\t\t\t%i\n" % count_words)
-	f.write("Uncertain transcriptions:\t\t%i\t(%.1f%%)\n" % (count_uncertain, float(count_uncertain)/float(count_words)*100))
-	f.write("Unclear passages:\t\t\t%i\t(%.1f%%)\n" % (count_unclear, float(count_unclear)/float(count_words)*100))
-	f.write("\n")
-	f.write("Number of breath groups aligned:\t%i\n" % count_chunks)
-	f.write("Duration of sound file:\t\t\t%.3f seconds\n" % duration)
-	f.write("Total time for alignment:\t\t%.2f seconds\n" % (times[-1][2] - times[1][2]))
-	f.write("Total time since beginning of program:\t%.2f seconds\n\n" % (times[-1][2] - times[0][2]))
-	f.write("->\taverage alignment duration:\t%.3f seconds per breath group\n" % ((times[-1][2] - times[1][2])/count_chunks))
-	f.write("->\talignment rate:\t\t\t%.3f times real time\n" % ((times[-1][2] - times[0][2])/duration))
-	f.write("\n\n")
-	f.write("Alignment statistics:\n\n")
-	f.write("Chunk\tCPU time\treal time\td(CPU)\td(time)\n")
-	for i in range(len(times)):
-		## first entry in "times" tuple is string already, or integer
-		f.write(str(times[i][0]))							   ## chunk number
-		f.write("\t")
-		f.write(str(round(times[i][1], 3)))					 ## CPU time
-		f.write("\t")
-		f.write(time.asctime(time.localtime(times[i][2])))	  ## real time
-		f.write("\t")
-		if i > 0:											   ## time differences (in seconds)
-			f.write(str(round(times[i][1] - times[i-1][1], 3)))
-			f.write("\t")
-			f.write(str(round(times[i][2] - times[i-1][2], 3)))
-		f.write("\n")
-	f.close()
-
-	return t_stamp
 
 
 ################################################################################
@@ -995,38 +494,7 @@ def FAAValign(opts, args, FADIR='', SOXPATH=''):
 
 
 
-	## add style tier to main TextGrid, if applicable
-	if style_tier:
-		main_textgrid.append(style_tier)
 
-	## tidy up main TextGrid (extend durations, insert empty intervals etc.)
-	main_textgrid = tidyup(main_textgrid, 0, duration, tgfile)
-
-	## append information on alignment failure to errorlog file
-	if failed_alignment:
-		write_alignment_errors_to_log(tgfile, failed_alignment)
-
-	## write main TextGrid to file
-	main_textgrid.write(tgfile)
-	if options.verbose:
-		print "Successfully written TextGrid %s to file." % os.path.basename(tgfile)
-
-	## delete temporary transcription files and "chunk" sound file/temp directory
-	#remove_tempdir(tempdir)
-	#empty_tempdir(tempdir)
-	#os.remove("blubbeldiblubb.txt")
-	## NOTE:  no longer needed because sound chunks and corresponding TextGrids are cleaned up in the loop
-	##		also, might delete sound chunks from other processes running in parallel!!!
-
-	## remove temporary CMU dictionary
-	os.remove(temp_dict)
-	if options.verbose:
-		print "Deleted temporary copy of the CMU dictionary."
-
-	## write log file
-	t_stamp = write_log(os.path.splitext(wavfile)[0] + ".FAAVlog", wavfile, duration)
-	if options.verbose:
-		print "Written log file %s." % os.path.basename(os.path.splitext(wavfile)[0] + ".FAAVlog")
 
 
 ################################################################################
