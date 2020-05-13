@@ -23,7 +23,7 @@ class TranscriptProcesor():
 		## "flag_uncertain" indicates whether we are currently inside an uncertain section of transcription
 		## (switched on and off by the beginning or end of double parentheses:  "((", "))")
 		self.logger = logging.getLogger(__name__)
-		slef.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+		self.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 		self.file = transript_file
 		self.__config_flags( self, *args, **kwargs )
