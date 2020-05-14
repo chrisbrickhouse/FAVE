@@ -1,4 +1,4 @@
-########################################################################################
+##########################################################################
 ##                  !!! This is NOT the original praat.py file !!!                    ##
 ##                                                                                    ##
 ## Last modified by Ingrid Rosenfelder:  March 18, 2010                               ##
@@ -6,266 +6,303 @@
 ## - docstrings for all classes and functions                                         ##
 ## - read() methods for TextGrid can read both long and short file formats            ##
 ## -                                                        ##
-########################################################################################
+##########################################################################
+import logging
 
 
 class Formant:
-  """represents a formant contour as a series of frames"""
-  def __init__(self, name = None):
-    self.__times = []             ## list of measurement times (frames)
-    self.__intensities = []       ## list of intensities (maximum intensity in each frame)
-    self.__formants = []          ## list of formants frequencies (F1-F3, for each frame)
-    self.__bandwidths = []        ## list of bandwidths (for each formant F1-F3, for each frame)
-                                  ## !!! all above lists only include frames with
-                                  ##       a minimum of 3 formant measurements    !!!
-    self.__xmin = None            ## start time (in seconds)
-    self.__xmax = None            ## end time (in seconds)
-    self.__nx = None              ## number of frames
-    self.__dx = None              ## time step = frame duration (in seconds)
-    self.__x1 = None              ## start time of first frame (in seconds)
-    self.__maxFormants = None     ## maximum number of formants in a frame
+    """represents a formant contour as a series of frames"""
 
-  def n(self):                    ## ??? WHAT IS N??? (DEFINITION?)
-    """returns ???"""
-    return self.__n
+    def __init__(self, name=None):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
 
-  def xmin(self):
-    """returns start time (in seconds)"""
-    return self.__xmin
+        self.__times = []  # list of measurement times (frames)
+        # list of intensities (maximum intensity in each frame)
+        self.__intensities = []
+        # list of formants frequencies (F1-F3, for each frame)
+        self.__formants = []
+        # list of bandwidths (for each formant F1-F3, for each frame)
+        self.__bandwidths = []
+        # !!! all above lists only include frames with
+        # a minimum of 3 formant measurements    !!!
+        self.__xmin = None  # start time (in seconds)
+        self.__xmax = None  # end time (in seconds)
+        self.__nx = None  # number of frames
+        self.__dx = None  # time step = frame duration (in seconds)
+        self.__x1 = None  # start time of first frame (in seconds)
+        self.__maxFormants = None  # maximum number of formants in a frame
 
-  def xmax(self):
-    """returns end time (in seconds)"""
-    return self.__xmax
+    def n(self):  # ??? WHAT IS N??? (DEFINITION?)
+        """returns number of frames"""
+        return self.__nx
 
-  def times(self):
-    """returns list of measurement times (frames)"""
-    return self.__times
+    def xmin(self):
+        """returns start time (in seconds)"""
+        return self.__xmin
 
-  def intensities(self):
-    """returns list of intensities (maximum intensity in each frame)"""
-    return self.__intensities
+    def xmax(self):
+        """returns end time (in seconds)"""
+        return self.__xmax
 
-  def formants(self):
-    """returns list of formant listings (F1-F3, for each frame)"""
-    return self.__formants
+    def times(self):
+        """returns list of measurement times (frames)"""
+        return self.__times
 
-  def bandwidths(self):
-    """returns a list of formant bandwidths (for each formant F1-F3, for each frame)"""
-    return self.__bandwidths
+    def intensities(self):
+        """returns list of intensities (maximum intensity in each frame)"""
+        return self.__intensities
 
-  def read(self, file):
-    """reads Formant from Praat .Formant file (either short or long file format)"""
-    text = open(file, 'rU')
-    text.readline()  # header
-    text.readline()
-    text.readline()
-    ## short or long Formant format?
-    line = text.readline().rstrip().split()             ## read fields in next line
-    if len(line) == 3 and line[0] == "xmin":              ## line reads "xmin = xxx.xxxxx"
-      format = "long"
-    elif len(line) == 1 and line[0] != '':               ## line reads "xxx.xxxxx"
-      format = "short"
-    else:
-      print "WARNING!!!  Unknown format for Formant file!"
+    def formants(self):
+        """returns list of formant listings (F1-F3, for each frame)"""
+        return self.__formants
 
-    if format == "short":  ## SHORT FORMANT FORMAT
-      self.__xmin = float(line[0])                        ## start time
-      self.__xmax = float(text.readline().rstrip())       ## end time
-      self.__nx = int(text.readline().rstrip())           ## number of frames
-      self.__dx = float(text.readline().rstrip())         ## frame duration
-      self.__x1 = float(text.readline().rstrip())         ## time of first frame
-      self.__maxFormants = int(text.readline().rstrip())  ## maximum number of formants
+    def bandwidths(self):
+        """returns a list of formant bandwidths (for each formant F1-F3, for each frame)"""
+        return self.__bandwidths
 
-      for i in range(self.__nx):  ## for each frame:
-        time = i * self.__dx + self.__x1
-        intensity = float(text.readline().rstrip())
-        nFormants = int(text.readline().rstrip())
-        F = []
-        B = []
-        for j in range(nFormants):
-          F.append(float(text.readline().rstrip()))
-          B.append(float(text.readline().rstrip()))
-        # force at least 3 formants to be returned for each measurment,
-        # if Praat didn't find at least three, then we'll disregard this measurement
-        if nFormants < 3:
-          continue
-        self.__times.append(time)
-        self.__intensities.append(intensity)
-        self.__formants.append(F)
-        self.__bandwidths.append(B)
-        
-    elif format == "long": ## LONG FORMANT FORMAT
-      self.__xmin = float(line[2])                                    ## start time
-      self.__xmax = float(text.readline().rstrip().split()[2])        ## end time
-      self.__nx = int(text.readline().rstrip().split()[2])            ## number of frames
-      self.__dx = float(text.readline().rstrip().split()[2])          ## frame duration
-      self.__x1 = float(text.readline().rstrip().split()[2])          ## time of first frame
-      self.__maxFormants = int(text.readline().rstrip().split()[2])   ## maximum number of formants
+    def read(self, file):
+        """reads Formant from Praat .Formant file (either short or long file format)"""
+        text = open(file, 'rU')
+        text.readline()  # header
+        text.readline()
+        text.readline()
+        # short or long Formant format?
+        line = text.readline().rstrip().split()  # read fields in next line
+        if len(
+                line) == 3 and line[0] == "xmin":  # line reads "xmin = xxx.xxxxx"
+            format = "long"
+        elif len(line) == 1 and line[0] != '':  # line reads "xxx.xxxxx"
+            format = "short"
+        else:
+            self.logger.warning("Unknown format for Formant file!")
 
-      text.readline()                                                 ## "frame[]:"
-      for i in range(self.__nx):  ## for each frame:
-        text.readline()                                               ## "frame[i]:"
-        time = i * self.__dx + self.__x1
-        intensity = float(text.readline().rstrip().split()[2])
-        nFormants = int(text.readline().rstrip().split()[2])
-        F = []
-        B = []
-        text.readline()                                               ## "formant[]:"
-        for j in range(nFormants):
-          text.readline()                                             ## "formant[i]:"
-          F.append(float(text.readline().rstrip().split()[2]))
-          B.append(float(text.readline().rstrip().split()[2]))
-        # force at least 3 formants to be returned for each measurment,
-        # if Praat didn't find at least three, then we'll disregard this measurement
-        if nFormants < 3:
-          continue
-        self.__times.append(time)
-        self.__intensities.append(intensity)
-        self.__formants.append(F)
-        self.__bandwidths.append(B)
+        if format == "short":  # SHORT FORMANT FORMAT
+            self.__xmin = float(line[0])  # start time
+            self.__xmax = float(text.readline().rstrip())  # end time
+            self.__nx = int(text.readline().rstrip())  # number of frames
+            self.__dx = float(text.readline().rstrip())  # frame duration
+            self.__x1 = float(text.readline().rstrip())  # time of first frame
+            # maximum number of formants
+            self.__maxFormants = int(text.readline().rstrip())
 
-    text.close()
+            for i in range(self.__nx):  # for each frame:
+                time = i * self.__dx + self.__x1
+                intensity = float(text.readline().rstrip())
+                nFormants = int(text.readline().rstrip())
+                F = []
+                B = []
+                for j in range(nFormants):
+                    F.append(float(text.readline().rstrip()))
+                    B.append(float(text.readline().rstrip()))
+                # force at least 3 formants to be returned for each measurment,
+                # if Praat didn't find at least three, then we'll disregard
+                # this measurement
+                if nFormants < 3:
+                    continue
+                self.__times.append(time)
+                self.__intensities.append(intensity)
+                self.__formants.append(F)
+                self.__bandwidths.append(B)
+
+        elif format == "long":  # LONG FORMANT FORMAT
+            self.__xmin = float(line[2])  # start time
+            self.__xmax = float(
+                text.readline().rstrip().split()[2])  # end time
+            self.__nx = int(text.readline().rstrip().split()
+                            [2])  # number of frames
+            self.__dx = float(
+                text.readline().rstrip().split()[2])  # frame duration
+            self.__x1 = float(text.readline().rstrip().split()[
+                              2])  # time of first frame
+            self.__maxFormants = int(text.readline().rstrip().split()[
+                                     2])  # maximum number of formants
+
+            text.readline()  # "frame[]:"
+            for i in range(self.__nx):  # for each frame:
+                text.readline()  # "frame[i]:"
+                time = i * self.__dx + self.__x1
+                intensity = float(text.readline().rstrip().split()[2])
+                nFormants = int(text.readline().rstrip().split()[2])
+                F = []
+                B = []
+                text.readline()  # "formant[]:"
+                for j in range(nFormants):
+                    text.readline()  # "formant[i]:"
+                    F.append(float(text.readline().rstrip().split()[2]))
+                    B.append(float(text.readline().rstrip().split()[2]))
+                # force at least 3 formants to be returned for each measurment,
+                # if Praat didn't find at least three, then we'll disregard
+                # this measurement
+                if nFormants < 3:
+                    continue
+                self.__times.append(time)
+                self.__intensities.append(intensity)
+                self.__formants.append(F)
+                self.__bandwidths.append(B)
+
+        text.close()
 
 
 class LPC:
-  """represents a Praat LPC (linear predictive coding) object"""
-  def __init__(self):
-    self.__times = []
-    self.__intensities = []
-    self.__poles = []
-    self.__bandwidths = []
-    self.__xmin = None
-    self.__xmax = None
-    self.__nx = None
-    self.__dx = None
-    self.__x1 = None
-    self.__maxFormants = None
+    """represents a Praat LPC (linear predictive coding) object"""
 
-  def times(self):
-    return self.__times
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+        self.__times = []
+        self.__intensities = []
+        self.__poles = []
+        self.__bandwidths = []
+        self.__xmin = None
+        self.__xmax = None
+        self.__nx = None
+        self.__dx = None
+        self.__x1 = None
+        self.__maxFormants = None
 
-  def poles(self):
-    return self.__poles
+    def times(self):
+        return self.__times
 
-  def bandwidths(self):
-    return self.__bandwidths
+    def poles(self):
+        return self.__poles
 
-  def nx(self):
-    return self.__nx
+    def bandwidths(self):
+        return self.__bandwidths
 
-  def dx(self):
-    return self.__dx
+    def nx(self):
+        return self.__nx
 
-  def x1(self):
-    return self.__x1
+    def dx(self):
+        return self.__dx
 
-  def read(self, file):
-    """reads LPC object from Praat .LPC file (saved as a short text file) """
-    text = open(file, 'rU')
-    text.readline()  # header
-    text.readline()
-    text.readline()
-    self.__xmin = float(text.readline().rstrip())
-    self.__xmax = float(text.readline().rstrip())
-    self.__nx = int(text.readline().rstrip())
-    self.__dx = float(text.readline().rstrip())
-    self.__x1 = float(text.readline().rstrip())
-    self.__maxFormants = int(text.readline().rstrip())
+    def x1(self):
+        return self.__x1
 
-    for i in range(self.__nx):
-      time = i * self.__dx + self.__x1
-      intensity = float(text.readline().rstrip())
-      nFormants = int(text.readline().rstrip())
-      F = []
-      B = []
-      for j in range(nFormants):
-        F.append(float(text.readline().rstrip()))
-        B.append(float(text.readline().rstrip()))
-      # force at least 3 formants to be returned for each measurment, if Praat didn't find at least three, then we'll disregard this measurement
-      if nFormants < 3:
-        continue
-      self.__times.append(time)
-      self.__intensities.append(intensity)
-      self.__poles.append(F)
-      self.__bandwidths.append(B)
+    def read(self, file):
+        """reads LPC object from Praat .LPC file (saved as a short text file) """
+        text = open(file, 'rU')
+        text.readline()  # header
+        text.readline()
+        text.readline()
+        self.__xmin = float(text.readline().rstrip())
+        self.__xmax = float(text.readline().rstrip())
+        self.__nx = int(text.readline().rstrip())
+        self.__dx = float(text.readline().rstrip())
+        self.__x1 = float(text.readline().rstrip())
+        self.__maxFormants = int(text.readline().rstrip())
 
-    text.close()
+        for i in range(self.__nx):
+            time = i * self.__dx + self.__x1
+            intensity = float(text.readline().rstrip())
+            nFormants = int(text.readline().rstrip())
+            F = []
+            B = []
+            for j in range(nFormants):
+                F.append(float(text.readline().rstrip()))
+                B.append(float(text.readline().rstrip()))
+            # force at least 3 formants to be returned for each measurment, if
+            # Praat didn't find at least three, then we'll disregard this
+            # measurement
+            if nFormants < 3:
+                continue
+            self.__times.append(time)
+            self.__intensities.append(intensity)
+            self.__poles.append(F)
+            self.__bandwidths.append(B)
+
+        text.close()
 
 
 class MFCC:
-  """represents a Praat MFCC (mel frequency cepstral coefficients) object"""
-  def __init__(self):
-    self.__times = []
-    self.__mfccs = []
-    self.__xmin = None
-    self.__xmax = None
-    self.__nx = None
-    self.__dx = None
-    self.__x1 = None
-    self.__fmin = None
-    self.__fmin = None
-    self.__maximumNumberOfCoefficients = None
+    """represents a Praat MFCC (mel frequency cepstral coefficients) object"""
 
-  def xmin(self):
-    return self.__xmin
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
 
-  def xmax(self):
-    return self.__xmax
+        self.__times = []
+        self.__mfccs = []
+        self.__xmin = None
+        self.__xmax = None
+        self.__nx = None
+        self.__dx = None
+        self.__x1 = None
+        self.__fmin = None
+        self.__fmin = None
+        self.__maximumNumberOfCoefficients = None
 
-  def nx(self):
-    return self.__nx
+    def xmin(self):
+        return self.__xmin
 
-  def dx(self):
-    return self.__dx
+    def xmax(self):
+        return self.__xmax
 
-  def x1(self):
-    return self.__x1
+    def nx(self):
+        return self.__nx
 
-  def fmin(self):
-    return self.__fmin
+    def dx(self):
+        return self.__dx
 
-  def fmax(self):
-    return self.__fmax
+    def x1(self):
+        return self.__x1
 
-  def times(self):
-    return self.__times
+    def fmin(self):
+        return self.__fmin
 
-  def mfccs(self):
-    return self.__mfccs
+    def fmax(self):
+        return self.__fmax
 
-  def read(self, file):
-    """reads MFCC object from Praat .MFCC file (saved as a short text file) """
-    text = open(file, 'rU')
-    text.readline()  # header
-    text.readline()
-    text.readline()
-    self.__xmin = float(text.readline().rstrip())
-    self.__xmax = float(text.readline().rstrip())
-    self.__nx = int(text.readline().rstrip())
-    self.__dx = float(text.readline().rstrip())
-    self.__x1 = float(text.readline().rstrip())
-    self.__fmin = float(text.readline().rstrip())
-    self.__fmax = float(text.readline().rstrip())
-    self.__maximumNumberOfCoefficients = int(text.readline().rstrip())
+    def times(self):
+        return self.__times
 
-    for i in range(self.__nx):
-      time = i * self.__dx + self.__x1
-      nCoefficients = int(text.readline().rstrip())
-      M = []
-      # the first one is c0, the energy coefficient
-      M.append(float(text.readline().rstrip()))
-      for j in range(nCoefficients):
-        M.append(float(text.readline().rstrip()))
-      self.__times.append(time)
-      self.__mfccs.append(M)
+    def mfccs(self):
+        return self.__mfccs
 
-    text.close()
+    def read(self, file):
+        """reads MFCC object from Praat .MFCC file (saved as a short text file) """
+        text = open(file, 'rU')
+        text.readline()  # header
+        text.readline()
+        text.readline()
+        self.__xmin = float(text.readline().rstrip())
+        self.__xmax = float(text.readline().rstrip())
+        self.__nx = int(text.readline().rstrip())
+        self.__dx = float(text.readline().rstrip())
+        self.__x1 = float(text.readline().rstrip())
+        self.__fmin = float(text.readline().rstrip())
+        self.__fmax = float(text.readline().rstrip())
+        self.__maximumNumberOfCoefficients = int(text.readline().rstrip())
+
+        for i in range(self.__nx):
+            time = i * self.__dx + self.__x1
+            nCoefficients = int(text.readline().rstrip())
+            M = []
+            # the first one is c0, the energy coefficient
+            M.append(float(text.readline().rstrip()))
+            for j in range(nCoefficients):
+                M.append(float(text.readline().rstrip()))
+            self.__times.append(time)
+            self.__mfccs.append(M)
+
+        text.close()
 
 
 class TextGrid:
     """represents a Praat TextGrid"""
 
-    def __init__(self, name = ''): 
+    def __init__(self, name=''):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+
         self.__tiers = []
         self.__n = len(self.__tiers)
         self.__xmin = 0
@@ -283,7 +320,7 @@ class TextGrid:
 
     def __getitem__(self, i):
         """ return the (i+1)th tier """
-        return self.__tiers[i] 
+        return self.__tiers[i]
 
     def xmin(self):
         return self.__xmin
@@ -313,38 +350,52 @@ class TextGrid:
     def read(self, filename):
         """reads TextGrid from Praat .TextGrid file (long or short format)"""
         text = open(filename, 'rU')
-        text.readline() # header                            ## line reads 'File type = "ooTextFile"'
-        text.readline()                                     ## line reads 'Object class = "TextGrid"'
-        text.readline()                                     ## blank line
-        ## short or long Formant format?
-        line = text.readline().strip().split()              ## read fields in next line
-        if len(line) == 3 and line[0] == "xmin":            ## line reads "xmin = xxx.xxxxx"
+        text.readline()  # header                            ## line reads 'File type = "ooTextFile"'
+        text.readline()  # line reads 'Object class = "TextGrid"'
+        text.readline()  # blank line
+        # short or long Formant format?
+        line = text.readline().strip().split()  # read fields in next line
+        if len(
+                line) == 3 and line[0] == "xmin":  # line reads "xmin = xxx.xxxxx"
             format = "long"
-        elif len(line) == 1 and line[0] != '':              ## line reads "xxx.xxxxx"
+        elif len(line) == 1 and line[0] != '':  # line reads "xxx.xxxxx"
             format = "short"
         else:
-            print "WARNING!!!  Unknown format for Formant file!"
+            self.logger.warning("Unknown format for Formant file!")
 
-        if format == "short":  ## SHORT TEXTGRID FORMAT
-            self.__xmin = round(float(line[0]), 3)     ## round to 3 digits; line reads "xxx.xxxxx"
-            self.__xmax = round(float(text.readline().rstrip()), 3)       ## line reads "xxx.xxxxx"
-            text.readline()                                               ## line reads "<exists>" (tiers exist)  
-            m = int(text.readline().rstrip())                             ## line reads "x" (number of tiers)
-            for i in range(m): ## loop over tiers
+        if format == "short":  # SHORT TEXTGRID FORMAT
+            # round to 3 digits; line reads "xxx.xxxxx"
+            self.__xmin = round(float(line[0]), 3)
+            self.__xmax = round(
+                float(
+                    text.readline().rstrip()),
+                3)  # line reads "xxx.xxxxx"
+            text.readline()  # line reads "<exists>" (tiers exist)
+            # line reads "x" (number of tiers)
+            m = int(text.readline().rstrip())
+            for i in range(m):  # loop over tiers
                 # [1:-1] strips off the quote characters surrounding all labels
-                if text.readline().strip()[1:-1] == 'IntervalTier':       ## line reads '"IntervalTier"'
-                    inam = text.readline().rstrip()[1:-1]                 ## line reads '"abcdefg"' (tier label)
-                    imin = round(float(text.readline().strip()), 3)       ## line reads "xxx.xxxxx" (beginning of tier)
-                    imax = round(float(text.readline().strip()), 3)       ## line reads "xxx.xxxxx" (end of tier)
+                if text.readline().strip()[
+                        1:-1] == 'IntervalTier':  # line reads '"IntervalTier"'
+                    # line reads '"abcdefg"' (tier label)
+                    inam = text.readline().rstrip()[1:-1]
+                    # line reads "xxx.xxxxx" (beginning of tier)
+                    imin = round(float(text.readline().strip()), 3)
+                    # line reads "xxx.xxxxx" (end of tier)
+                    imax = round(float(text.readline().strip()), 3)
                     itier = IntervalTier(inam, imin, imax)
-                    n = int(text.readline().rstrip())                     ## line reads "xxxxx" (number of intervals in tier)
+                    # line reads "xxxxx" (number of intervals in tier)
+                    n = int(text.readline().rstrip())
                     for j in range(n):
-                        jmin = round(float(text.readline().strip()), 3)   ## line reads "xxx.xxxxx" (beginning of interval)
-                        jmax = round(float(text.readline().strip()), 3)   ## line reads "xxx.xxxxx" (end of interval)
-                        jmrk = text.readline().strip()[1:-1]              ## line reads '"abcdefg"' (interval label)
+                        # line reads "xxx.xxxxx" (beginning of interval)
+                        jmin = round(float(text.readline().strip()), 3)
+                        # line reads "xxx.xxxxx" (end of interval)
+                        jmax = round(float(text.readline().strip()), 3)
+                        jmrk = text.readline().strip()[
+                            1:-1]  # line reads '"abcdefg"' (interval label)
                         itier.append(Interval(jmin, jmax, jmrk))
-                    self.append(itier)   ## automatically updates self.__n
-                else: # pointTier
+                    self.append(itier)  # automatically updates self.__n
+                else:  # pointTier
                     inam = text.readline().rstrip()[1:-1]
                     imin = round(float(text.readline().rstrip()), 3)
                     imax = round(float(text.readline().rstrip()), 3)
@@ -355,45 +406,83 @@ class TextGrid:
                         jmrk = text.readline().rstrip()[1:-1]
                         itier.append(Point(jtim, jmrk))
                     self.append(itier)
-            if self.__n != m:  print "In TextGrid.IntervalTier.read:  Error in number of tiers!"
+            if self.__n != m:
+                raise ValueError("Error in number of tiers!")
             text.close()
-        elif format == "long":  ## LONG TEXTGRID FORMAT
-            self.__xmin = round(float(line[2]), 3)                                  ## line reads "xmin = xxx.xxxxx"
-            self.__xmax = round(float(text.readline().strip().split(' = ')[1]), 3)  ## line reads "xmax = xxx.xxxxx"
-            text.readline()                                                         ## line reads "tiers? <exists>"
-            m = int(text.readline().strip().split(' = ')[1])                        ## line reads "size = x"
-            text.readline()                                                         ## line reads "item []:"
-            for i in range(m): ## loop over tiers
-                text.readline()                                                     ## line reads "item [x]:"
-                if text.readline().rstrip().split()[2] == '"IntervalTier"':         ## line reads "class = 'IntervalTier"'
-                    inam = text.readline().strip().split(' = ')[1][1:-1]            ## line reads 'name = "xyz"'
-                    imin = round(float(text.readline().strip().split(' = ')[1]), 3) ## line reads "xmin = xxx.xxxxx"
-                    imax = round(float(text.readline().strip().split(' = ')[1]), 3) ## line reads "xmax = xxx.xxxxx"
-                    itier = IntervalTier(inam, imin, imax) 
-                    n = int(text.readline().strip().split(' = ')[1])                ## line reads "intervals: size = xxxxx"
-                    for j in range(n):
-                        text.readline()  # header junk                              ## line reads "intervals [x]:"
-                        jmin = round(float(text.readline().strip().split(' = ')[1]), 3) ## line reads "xmin = xxx.xxxxx"
-                        jmax = round(float(text.readline().strip().split(' = ')[1]), 3) ## line reads "xmax = xxx.xxxxx"
-                        jmrk = text.readline().strip().split(' = ')[1][1:-1]        ## line reads 'text = "xyz"'
-                        itier.append(Interval(jmin, jmax, jmrk))
-                    self.append(itier)   ## automatically updates self.__n
-                else: # pointTier
-                    inam = text.readline().strip().split(' = ')[1][1:-1]
-                    imin = round(float(text.readline().strip().split(' = ')[1]), 3)
-                    imax = round(float(text.readline().strip().split(' = ')[1]), 3)
-                    itier = PointTier(inam, imin, imax) 
+        elif format == "long":  # LONG TEXTGRID FORMAT
+            # line reads "xmin = xxx.xxxxx"
+            self.__xmin = round(float(line[2]), 3)
+            self.__xmax = round(
+                float(
+                    text.readline().strip().split(' = ')[1]),
+                3)  # line reads "xmax = xxx.xxxxx"
+            text.readline()  # line reads "tiers? <exists>"
+            m = int(text.readline().strip().split(
+                ' = ')[1])  # line reads "size = x"
+            text.readline()  # line reads "item []:"
+            for i in range(m):  # loop over tiers
+                text.readline()  # line reads "item [x]:"
+                if text.readline().rstrip().split()[
+                        2] == '"IntervalTier"':  # line reads "class = 'IntervalTier"'
+                    inam = text.readline().strip().split(
+                        ' = ')[1][1:-1]  # line reads 'name = "xyz"'
+                    # line reads "xmin = xxx.xxxxx"
+                    imin = round(
+                        float(
+                            text.readline().strip().split(' = ')[1]),
+                        3)
+                    # line reads "xmax = xxx.xxxxx"
+                    imax = round(
+                        float(
+                            text.readline().strip().split(' = ')[1]),
+                        3)
+                    itier = IntervalTier(inam, imin, imax)
+                    # line reads "intervals: size = xxxxx"
                     n = int(text.readline().strip().split(' = ')[1])
                     for j in range(n):
-                        text.readline() # header junk
-                        jtim = round(float(text.readline().strip().split(' = ')[1]), 3)
-                        jmrk = text.readline().strip().split(' = ')[1][1:-1]  
+                        # header junk                              ## line
+                        # reads "intervals [x]:"
+                        text.readline()
+                        # line reads "xmin = xxx.xxxxx"
+                        jmin = round(
+                            float(
+                                text.readline().strip().split(' = ')[1]),
+                            3)
+                        # line reads "xmax = xxx.xxxxx"
+                        jmax = round(
+                            float(
+                                text.readline().strip().split(' = ')[1]),
+                            3)
+                        jmrk = text.readline().strip().split(
+                            ' = ')[1][1:-1]  # line reads 'text = "xyz"'
+                        itier.append(Interval(jmin, jmax, jmrk))
+                    self.append(itier)  # automatically updates self.__n
+                else:  # pointTier
+                    inam = text.readline().strip().split(' = ')[1][1:-1]
+                    imin = round(
+                        float(
+                            text.readline().strip().split(' = ')[1]),
+                        3)
+                    imax = round(
+                        float(
+                            text.readline().strip().split(' = ')[1]),
+                        3)
+                    itier = PointTier(inam, imin, imax)
+                    n = int(text.readline().strip().split(' = ')[1])
+                    for j in range(n):
+                        text.readline()  # header junk
+                        jtim = round(
+                            float(
+                                text.readline().strip().split(' = ')[1]),
+                            3)
+                        jmrk = text.readline().strip().split(' = ')[1][1:-1]
                         itier.append(Point(jtim, jmrk))
                     self.append(itier)
-            if self.__n != m:  print "In TextGrid.IntervalTier.read:  Error in number of tiers!"
+            if self.__n != m:
+                raise ValueError("Error in number of tiers!")
             text.close()
 
-    def write(self, text):  
+    def write(self, text):
         """ write TextGrid into a text file that Praat can read """
         text = open(text, 'w')
         text.write('File type = "ooTextFile"\n')
@@ -405,18 +494,18 @@ class TextGrid:
         text.write('item []:\n')
         for (tier, n) in zip(self.__tiers, range(1, self.__n + 1)):
             text.write('\titem [%d]:\n' % n)
-            if tier.__class__ == IntervalTier: 
+            if tier.__class__ == IntervalTier:
                 text.write('\t\tclass = "IntervalTier"\n')
                 text.write('\t\tname = "%s"\n' % tier.name())
                 text.write('\t\txmin = %f\n' % tier.xmin())
                 text.write('\t\txmax = %f\n' % tier.xmax())
                 text.write('\t\tintervals: size = %d\n' % len(tier))
-                for (interval, o) in zip(tier, range(1, len(tier) + 1)): 
+                for (interval, o) in zip(tier, range(1, len(tier) + 1)):
                     text.write('\t\t\tintervals [%d]:\n' % o)
                     text.write('\t\t\t\txmin = %f\n' % interval.xmin())
                     text.write('\t\t\t\txmax = %f\n' % interval.xmax())
                     text.write('\t\t\t\ttext = "%s"\n' % interval.mark())
-            else: # PointTier
+            else:  # PointTier
                 text.write('\t\tclass = "TextTier"\n')
                 text.write('\t\tname = "%s"\n' % tier.name())
                 text.write('\t\txmin = %f\n' % tier.xmin())
@@ -432,7 +521,12 @@ class TextGrid:
 class IntervalTier:
     """represents a Praat IntervalTier"""
 
-    def __init__(self, name = '', xmin = 0, xmax = 0):
+    def __init__(self, name='', xmin=0, xmax=0):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+
         self.__intervals = []
         self.__n = len(self.__intervals)
         self.__name = name
@@ -440,7 +534,8 @@ class IntervalTier:
         self.__xmax = xmax
 
     def __str__(self):
-        return '<IntervalTier "%s" with %d intervals>' % (self.__name, self.__n)
+        return '<IntervalTier "%s" with %d intervals>' % (
+            self.__name, self.__n)
 
     def __iter__(self):
         return iter(self.__intervals)
@@ -463,23 +558,23 @@ class IntervalTier:
 
     def append(self, interval):
         self.__intervals.append(interval)
-        self.__xmax = max(interval.xmax(), self.__xmax)   ## changed
-        self.__xmin = min(interval.xmin(), self.__xmin)   ## added
-        self.__n = len(self.__intervals)    ## changed to "automatic update"
+        self.__xmax = max(interval.xmax(), self.__xmax)  # changed
+        self.__xmin = min(interval.xmin(), self.__xmin)  # added
+        self.__n = len(self.__intervals)  # changed to "automatic update"
 
     def read(self, file):
         text = open(file, 'r')
-        text.readline() # header junk 
+        text.readline()  # header junk
         text.readline()
         text.readline()
         self.__xmin = float(text.readline().rstrip().split()[2])
         self.__xmax = float(text.readline().rstrip().split()[2])
         m = int(text.readline().rstrip().split()[3])
         for i in range(m):
-            text.readline().rstrip() # header
-            imin = float(text.readline().rstrip().split()[2]) 
+            text.readline().rstrip()  # header
+            imin = float(text.readline().rstrip().split()[2])
             imax = float(text.readline().rstrip().split()[2])
-            imrk = text.readline().rstrip().split()[2].replace('"', '') # txt
+            imrk = text.readline().rstrip().split()[2].replace('"', '')  # txt
             self.__intervals.append(Interval(imin, imax, imrk))
         text.close()
         self.__n = len(self.__intervals)
@@ -504,54 +599,64 @@ class IntervalTier:
 
     def sort_intervals(self, par="xmin"):
         """sorts intervals according to given parameter values.  Parameter can be xmin (default), xmax, or text."""
-        ## function generating key used for sorting
+        # function generating key used for sorting
         if par == "xmin":
-            def f(i):  return i.xmin()
+            def f(i): return i.xmin()
         elif par == "xmax":
-            def f(i):  return i.xmax()
+            def f(i): return i.xmax()
         elif par == "text":
-            def f(i):  return i.mark()
+            def f(i): return i.mark()
         else:
-            sys.stderr.write("Invalid parameter for function sort_intervals.")
-        self.__intervals.sort(key = f)
+            raise ValueError("Invalid parameter for function sort_intervals.")
+        self.__intervals.sort(key=f)
 
     def extend(self, newmin, newmax):
+        self.logger.debug("newmin:      " + str(newmin))
+        self.logger.debug("newmax:      " + str(newmax))
+        self.logger.debug("self.__xmax: " + str(self.__xmax))
+        self.logger.debug("self.__xmin: " + str(self.__xmin))
         if newmin > self.__xmin:
-            print "newmin:  ", newmin
-            print "self.__xmin", self.__xmin
-            sys.exit("Error!  New minimum of tier exceeds old minimum.")
+            self.logger.error("New minimum of tier exceeds old minimum.")
+            raise ValueError("New minimum of tier exceeds old minimum.")
         if newmax < self.__xmax:
-            print "newmax:  ", newmax
-            print "self.__xmax:  ", self.__xmax
-            sys.exit("Error!  New maximum of tier is less than old maximum.")
+            self.logger.error("New maximum of tier is less than old maximum.")
+            raise ValueError("New maximum of tier is less than old maximum.")
         self.__xmin = newmin
         self.__xmax = newmax
-        ## add new intervals at beginning and end
+        # add new intervals at beginning and end
         self.sort_intervals()
-        self.__intervals.append(Interval(newmin, self.__intervals[0].xmin(), "sp"))
+        self.__intervals.append(
+            Interval(
+                newmin,
+                self.__intervals[0].xmin(),
+                "sp"))
         self.sort_intervals()
-        self.__intervals.append(Interval(self.__intervals[-1].xmax(), newmax, "sp"))
+        self.__intervals.append(
+            Interval(self.__intervals[-1].xmax(), newmax, "sp"))
         self.__n = len(self.__intervals)
-    
+
     def tidyup(self):
         """inserts empty intervals in the gaps between transcription intervals"""
         self.sort_intervals()
         z = 0
         end = len(self.__intervals) - 1
         overlaps = []
-        while z < end:  ## (only go up to second-to-last interval)
+        while z < end:  # (only go up to second-to-last interval)
             i = self.__intervals[z]
-            if i.xmax() != self.__intervals[z+1].xmin():
-                ## insert empty interval if xmax of interval and xmin of following interval do not coincide
-                if i.xmax() < self.__intervals[z+1].xmin():
-                    self.__intervals.append(Interval(i.xmax(), self.__intervals[z+1].xmin(), "sp"))
+            if i.xmax() != self.__intervals[z + 1].xmin():
+                # insert empty interval if xmax of interval and xmin of
+                # following interval do not coincide
+                if i.xmax() < self.__intervals[z + 1].xmin():
+                    self.__intervals.append(
+                        Interval(i.xmax(), self.__intervals[z + 1].xmin(), "sp"))
                     self.__n = len(self.__intervals)
                     self.sort_intervals()
-                    ## update iteration range
+                    # update iteration range
                     end = len(self.__intervals) - 1
-                else:   ## overlapping interval boundaries
-                    overlaps.append((i, self.__intervals[z+1], self.__name))
-                    print "WARNING!!!  Overlapping intervals %s and %s on tier %s!!!" % (i, self.__intervals[z+1], self.__name)
+                else:  # overlapping interval boundaries
+                    overlaps.append((i, self.__intervals[z + 1], self.__name))
+                    self.logger.warning("Overlapping intervals %s and %s on tier %s!!!" % (
+                        i, self.__intervals[z + 1], self.__name))
             z += 1
         return overlaps
 
@@ -565,7 +670,12 @@ class IntervalTier:
 class PointTier:
     """represents a Praat PointTier"""
 
-    def __init__(self, name = '', xmin = 0, xmax = 0):
+    def __init__(self, name='', xmin=0, xmax=0):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+
         self.__name = name
         self.__xmin = xmin
         self.__xmax = xmax
@@ -577,10 +687,10 @@ class PointTier:
 
     def __iter__(self):
         return iter(self.__points)
-    
+
     def __len__(self):
         return self.__n
-    
+
     def __getitem__(self, i):
         """returns the (i+1)th point"""
         return self.__points[i]
@@ -591,7 +701,7 @@ class PointTier:
     def xmin(self):
         return self.__xmin
 
-    def xmax(self): 
+    def xmax(self):
         return self.__xmax
 
     def append(self, point):
@@ -602,16 +712,16 @@ class PointTier:
 
     def read(self, file):
         text = open(file, 'r')
-        text.readline() # header junk 
+        text.readline()  # header junk
         text.readline()
         text.readline()
         self.__xmin = float(text.readline().rstrip().split()[2])
         self.__xmax = float(text.readline().rstrip().split()[2])
         self.__n = int(text.readline().rstrip().split()[3])
         for i in range(self.__n):
-            text.readline().rstrip() # header
+            text.readline().rstrip()  # header
             itim = float(text.readline().rstrip().split()[2])
-            imrk = text.readline().rstrip().split()[2].replace('"', '') # txt
+            imrk = text.readline().rstrip().split()[2].replace('"', '')  # txt
             self.__points.append(Point(imrk, itim))
         text.close()
 
@@ -631,13 +741,20 @@ class PointTier:
 
 class Interval:
     """represents an Interval"""
-    def __init__(self, xmin = 0, xmax = 0, mark = ''):
+
+    def __init__(self, xmin=0, xmax=0, mark=''):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+
         self.__xmin = xmin
         self.__xmax = xmax
         self.__mark = mark
-    
+
     def __str__(self):
-        return '<Interval "%s" %f:%f>' % (self.__mark, self.__xmin, self.__xmax)
+        return '<Interval "%s" %f:%f>' % (
+            self.__mark, self.__xmin, self.__xmax)
 
     def xmin(self):
         return self.__xmin
@@ -658,10 +775,16 @@ class Interval:
 
 class Point:
     """represents a Point"""
+
     def __init__(self, time, mark):
+        self.logger = logging.getLogger(__name__)
+        self.logger.basicConfig(
+            format='%(levelname)s:%(message)s',
+            level=logging.DEBUG)
+
         self.__time = time
         self.__mark = mark
-    
+
     def __str__(self):
         return '<Point "%s" at %f>' % (self.__mark, self.__time)
 
