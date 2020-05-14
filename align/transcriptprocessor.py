@@ -32,7 +32,7 @@ import re
 import sys
 import os
 import logging
-import cmudictionary
+from . import cmudictionary
 
 class TranscriptProcesor():
     start_uncertain = re.compile(r'(\(\()')                 ## beginning of uncertain transcription
@@ -55,7 +55,7 @@ class TranscriptProcesor():
         ## "flag_uncertain" indicates whether we are currently inside an uncertain section of transcription
         ## (switched on and off by the beginning or end of double parentheses:  "((", "))")
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+        logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
         self.file = transript_file
         self.__config_flags( self, *args, **kwargs )
@@ -64,7 +64,7 @@ class TranscriptProcesor():
         self.last_beg_uncertain = ''
         self.last_end_uncertain = ''
         self.temp_dict_dir = None
-        if not isinstance(pronunciation_dictionary,'CMU_Dictionary'):
+        if not isinstance(pronunciation_dictionary, cmudictionary.CMU_Dictionary):
             raise ValueError('pronunciation_dictionary must be a CMU_Dictionary object')
         self.dictionary = pronunciation_dictionary
 
@@ -72,12 +72,18 @@ class TranscriptProcesor():
         self.verbose = False
         self.prompt = False
         self.check = False
-        if kwargs['verbose']:
+        try:
             self.verbose = kwargs['verbose']
-        if kwargs['prompt']:
+        except KeyError:
+            pass
+        try:
             self.prompt = kwargs['prompt']
-        if kwargs['check']:
+        except KeyError:
+            pass
+        try:
             self.check = kwargs['check']
+        except KeyError:
+            pass
 
     def check_dictionary_entries(self, wavfile):
         """checks that all words in lines have an entry in the CMU dictionary;

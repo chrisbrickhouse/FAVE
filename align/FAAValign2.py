@@ -55,7 +55,8 @@ def define_options_and_arguments():
 def main(args):
 	aligner = Aligner(*args)
 	aligner.read_transcript()
-	aligner.check_transcription_file()
+	aligner.check_transcript()
+	# works up to here
 	aligner.check_against_dictionary()
 
 	if check:
