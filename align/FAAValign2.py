@@ -56,7 +56,6 @@ def main(args):
 	aligner = Aligner(*args)
 	aligner.read_transcript()
 	aligner.check_transcript()
-	# works up to here
 	aligner.check_against_dictionary()
 
 	if check:
@@ -65,6 +64,7 @@ def main(args):
 	aligner.check_tempdir('')
 	main_textgrid = praat.TextGrid()
 	duration = aligner.get_duration()
+	# works up to here
 	aligner.align()
 
 

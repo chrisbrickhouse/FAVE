@@ -93,7 +93,7 @@ class TranscriptProcesor():
         ## OUTPUT:  list newlines = list of list of words for each line (processed)
         ## - prompts user to modify CMU dictionary (cmudict) and writes updated version of CMU dictionary to file
         ## - if "check transcription" option is selected, writes list of unknown words to file and exits
-
+        self.logger.debug('Checking dictionary entries')
         newlines = []
         unknown = {}
 
@@ -151,6 +151,8 @@ class TranscriptProcesor():
         ## INPUT:  string line = line of orthographic transcription
         ## OUTPUT:  list words = list of individual words in transcription
 
+        self.logger.info("Preprocessing transcript line")
+        self.logger.debug(line)
         flag_uncertain = self.flag_uncertain
         last_beg_uncertain = self.last_beg_uncertain
         last_end_uncertain = self.last_end_uncertain
@@ -185,31 +187,35 @@ class TranscriptProcesor():
 
         ## split line into words:
         words = line.split()
+        self.logger.debug(words)
 
         ## add uncertainty parentheses around every word individually
         newwords = []
         for word in words:
+            self.logger.debug(word)
+            self.logger.debug(flag_uncertain)
             if word == "((":        ## beginning of uncertain transcription span
-                if not flag_uncertain:
+                if not self.flag_uncertain:
                     self.flag_uncertain = True
                     self.last_beg_uncertain = original_line
                 else:
                     msg = "Beginning of uncertain transcription span detected twice in a row\n"
-                    msg += ("Please close the the opening double parenthesis in line %s." % last_beg_uncertain)
+                    msg += ("Please close the the opening double parenthesis in line '%s'" % last_beg_uncertain)
                     raise ValueError( msg )
-            elif word == "))":      ## end of uncertain transcription span
-                if flag_uncertain:
+                continue
+            if word == "))":      ## end of uncertain transcription span
+                if self.flag_uncertain:
                     self.flag_uncertain = False
                     self.last_end_uncertain = original_line
                 else:
                     msg = "End of uncertain transcription span detected twice in a row\n"
-                    msg += "No opening double parentheses for line %s." % original_line
+                    msg += "No opening double parentheses for line %s." % last_end_uncertain
                     raise ValueError( msg )
-            else:  ## process words
-                if flag_uncertain:
-                    newwords.append("((" + word + "))")
-                else:
-                    newwords.append(word)
+                continue
+            if self.flag_uncertain:
+                newwords.append("((" + word + "))")
+            else:
+                newwords.append(word)
 
         return newwords
 

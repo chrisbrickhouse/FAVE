@@ -151,7 +151,7 @@ class LPC:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
         self.__times = []
@@ -223,7 +223,7 @@ class MFCC:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
@@ -299,7 +299,7 @@ class TextGrid:
 
     def __init__(self, name=''):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
@@ -523,7 +523,7 @@ class IntervalTier:
 
     def __init__(self, name='', xmin=0, xmax=0):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
@@ -672,7 +672,7 @@ class PointTier:
 
     def __init__(self, name='', xmin=0, xmax=0):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
@@ -744,7 +744,7 @@ class Interval:
 
     def __init__(self, xmin=0, xmax=0, mark=''):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
@@ -778,7 +778,7 @@ class Point:
 
     def __init__(self, time, mark):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
