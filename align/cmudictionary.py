@@ -33,43 +33,47 @@ class CMU_Dictionary():
         ## check that cmudict has entries
         if len(self.cmu_dict) == 0:
             self.logger.warning('Dictionary %s is empty' % dictionary_file)
-        self.logger.debug("Read dictionary from file %s" % dictionary_file)
+        self.logger.debug("End initialization.")
 
     def __config_flags( self, *args, **kwargs ):
+        self.logger.debug('Reading config flags')
         self.verbose = False
         self.prompt = False
         self.check = False
         try:
             self.verbose = kwargs['verbose']
         except KeyError:
-            pass
+            self.logger.debug('No verbose argument; default to false.')
         try:
             self.prompt = kwargs['prompt']
         except KeyError:
-            pass
+            self.logger.debug('No prompt argument; default to false.')
         try:
             self.check = kwargs['check']
         except KeyError:
-            pass
+            self.logger.debug('No check argument; default to false.')
 
     def read(self,dictionary_file):
         """
         @author Keelan Evanini
         """
+        self.logger.info(f'Reading dictionary from {dictionary_file}')
         cmu_dict = {}
         pat = re.compile('  *')                ## two spaces separating CMU dict entries
-		# CMU dictionary should be converted to a unicode format
+        # CMU dictionary should be converted to a unicode format
         with open(dictionary_file,'r', encoding="latin1") as cmu_dict_file:
             for line in cmu_dict_file.readlines():
                 line = line.rstrip()
                 line = re.sub(pat, ' ', line)      ## reduce all spaces to one
+                self.logger.debug(f'Dictionary line: {line}')
                 word = line.split(' ')[0]          ## orthographic transcription
+                self.logger.debug(f'Word: {str(word)}')
                 phones = line.split(' ')[1:]       ## phonemic transcription
+                self.logger.debug(f'Phones: {str(phones)}')
                 if word not in cmu_dict:
-                    cmu_dict[word] = [phones]       ## phonemic transcriptions represented as list of lists of phones
-                else:
-                    if phones not in cmu_dict[word]:
-                        cmu_dict[word].append(phones)   ## add alternative pronunciation to list of pronunciations
+                    cmu_dict[word] = []
+                if phones not in cmu_dict[word]:
+                    cmu_dict[word].append(phones)   ## add pronunciation to list of pronunciations
         return cmu_dict
 
     def add_dictionary_entries(self, infile, path='.'):
@@ -174,7 +178,30 @@ class CMU_Dictionary():
         else:
             raise ValueError("Unknown phone %s (at position %i) in word %s!\n" % (phone, index+1, transcription))
 
-    def check_word(self,word, next_word='', unknown={}, line=''):
+    def __check_word(self, word, next_word):
+        """A rewrite of check word
+        returns bool
+        """
+
+        if word.upper() in self.cmu_dict:
+            return True
+        self.logger.info(f'Cannot find {word} in dictionary')
+        if self.intended.search(next_word):
+            self.logger.debug(f'Hint given: {next_word}')
+            if next_word in self.cmu_dict:
+                self.logger.info(f'Clue is in dictionary')
+                if self.check:
+                    self.logger.debug(
+                        'Running in check mode, returning false so transcript can be checked')
+                    return False
+                else:
+                    return True
+        else:
+            self.logger.debug('No hint given')
+            return False
+
+
+    def check_word(self,word, next_word='', unknown=None, line=''):
         """checks whether a given word's phonetic transcription is in the CMU dictionary;
         adds the transcription to the dictionary if not"""
         ## INPUT:
@@ -183,95 +210,68 @@ class CMU_Dictionary():
         ## OUTPUT:
         ## dict unknown = unknown or truncated words (needed if "check transcription" option is selected; remains empty otherwise)
         ## - modifies CMU dictionary (dict cmudict)
+        if type(unknown) is not dict:
+            unknown = {}
+
+        self.logger.info(f'Checking if \'{word}\' in dictionary')
+        if self.__check_word(word, next_word):
+            inDict = True
+        else:
+            inDict = False
+
         cmudict = self.cmu_dict
+        clue = next_word.strip().lstrip('+').upper()
 
-        clue = ''
-
-        ## dictionary entry for truncated words may exist but not be correct for the current word
-        ## (check first because word will be in CMU dictionary after procedure below)
-        if self.truncated.search(word) and word in cmudict:
-            ## check whether following word is "clue" word?
-            if self.intended.search(next_word):
-                clue = next_word
-            ## do not prompt user for input if "check transcription" option is selected
-            ## add truncated word together with its proposed transcription to list of unknown words
-            ## (and with following "clue" word, if present)
-            if self.check:
-                if clue:
-                    unknown[word] = (cmudict[word], clue.lstrip('+'), line)
-                else:
-                    unknown[word] = (cmudict[word], '', line)
-            ## prompt user for input
-            else:
-                self.logger.warning("Unknown truncation")
-                # Should not prompt user, but behavior should be caught
-                # and handled by user-facing FAAValign2.py
-                """
-                self.logger.debug("Dictionary entry for truncated word %s is %s." % (word, cmudict[word]))
-                if clue:
-                    self.logger.debug("Following word is %s." % next_word)
-                correct = raw_input("Is this correct?  [y/n]")
-                if correct != "y":
-                    transcription = prompt_user(word, clue)
-                    cmudict[word] = [transcription]
-                """
-
-        elif word not in cmudict and word not in self.STYLE_ENTRIES:
-            ## truncated words:
-            if self.truncated.search(word):
-                ## is following word "clue" word?  (starts with "+")
-                if self.intended.search(next_word):
-                    clue = next_word
+        if not inDict and word not in self.STYLE_ENTRIES:
             ## don't do anything if word itself is a clue word
-            elif self.intended.search(word):
+            if '+' in word:
                 return unknown
             ## don't do anything for unclear transcriptions:
-            elif word == '((xxxx))':
+            if word == '((xxxx))':
                 return unknown
             ## uncertain transcription:
-            elif self.start_uncertain.search(word) or self.end_uncertain.search(word):
+            if self.start_uncertain.search(word) or self.end_uncertain.search(word):
                 if self.start_uncertain.search(word) and self.end_uncertain.search(word):
                     word = word.replace('((', '')
                     word = word.replace('))', '')
                     ## check if word is in dictionary without the parentheses
-                    self.check_word(word, '', unknown, line)
-                    return unknown
+                    if not self.__check_word(word,''):
+                        return unknown
                 else:  ## This should not happen!
                     error= "ERROR!  Something is wrong with the transcription of word %s!" % word
                     raise ValueError(error)
             ## asterisked transcriptions:
-            elif word and word[0] == "*":
+            elif word[0] == "*":
                 ## check if word is in dictionary without the asterisk
-                self.check_word(word[1:], '', unknown, line)
-                return unknown
+                if not self.__check_word(word[1:],''):
+                    return unknown
             ## generate new entries for "-in'" words
-            if self.ing.search(word):
-                gword = self.ing.sub("ING", word)
+            if word[-3:].upper() == "IN'":
+                gword = word[:-1].upper()+'G'
                 ## if word has entry/entries for corresponding "-ing" form:
-                if gword in cmudict:
+                if self.__check_word(gword, ''):
                     for t in cmudict[gword]:
                         ## check that transcription entry ends in "- IH0 NG":
-                        if t[-1] == "NG" and t[-2] == "IH0":
-                            tt = t
-                            tt[-1] = "N"
-                            tt[-2] = "AH0"
-                            if word not in cmudict:
-                                cmudict[word] = [tt]
-                            else:
-                                cmudict[word].append(tt)
+                        if t[-2:] == ["IH0", "NG"]:
+                            new_transcription = t[:-2]
+                            new_transcription[-2] = "AH0"
+                            new_transcription[-1] = "N"
+                            if not inDict:
+                                self.cmu_dict[word] = []
+                            if new_transcription not in cmudict[gword]:
+                                self.cmu_dict[word].append(new_transcription)
                     return unknown
             ## if "check transcription" option is selected, add word to list of unknown words
-            if self.check:
-                if clue:
-                    unknown[word] = ("", clue.lstrip('+'), line)
-                else:
-                    unknown[word] = ("", "", line)
-                self.logger.warning("Unknown word %s : %s." % (word.encode('ascii', 'replace'), line.encode('ascii', 'replace')))
-
-            ## otherwise, promput user for Arpabet transcription of missing word
+            if not inDict:
+                self.logger.warning(f"Unknown word '{word}' in line '{line}'")
+                unknown[word] = ("", clue.lstrip('+'), line)
+                return unknown
+        if word in self.STYLE_ENTRIES:
+            self.logger.info(f"Style entry: {word}")
+        elif inDict:
+            self.logger.debug(f"Entry found")
         else:
             self.logger.warning("No transcription for "+word)
-
         return unknown
 
     def merge_dicts(self, d1, d2):
@@ -297,7 +297,8 @@ class CMU_Dictionary():
             dictionary = self.cmu_dict
         out_string = ''
         ## sort dictionary before writing to file
-        keys = dictionary.keys()
+        keys = list(dictionary)
+        # self.logger.debug(keys)
         keys.sort()
         for word in keys:
             ## make a separate entry for each pronunciation in case of alternative entries
