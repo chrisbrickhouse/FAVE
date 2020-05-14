@@ -24,7 +24,7 @@ class CMU_Dictionary():
         @author Christian Brickhouse
         """
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+        logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
         self.__config_flags( *args, **kwargs )
 
@@ -39,12 +39,18 @@ class CMU_Dictionary():
         self.verbose = False
         self.prompt = False
         self.check = False
-        if kwargs['verbose']:
+        try:
             self.verbose = kwargs['verbose']
-        if kwargs['prompt']:
+        except KeyError:
+            pass
+        try:
             self.prompt = kwargs['prompt']
-        if kwargs['check']:
+        except KeyError:
+            pass
+        try:
             self.check = kwargs['check']
+        except KeyError:
+            pass
 
     def read(self,dictionary_file):
         """
@@ -52,7 +58,8 @@ class CMU_Dictionary():
         """
         cmu_dict = {}
         pat = re.compile('  *')                ## two spaces separating CMU dict entries
-        with open(dictionary_file,'r') as cmu_dict_file:
+		# CMU dictionary should be converted to a unicode format
+        with open(dictionary_file,'r', encoding="latin1") as cmu_dict_file:
             for line in cmu_dict_file.readlines():
                 line = line.rstrip()
                 line = re.sub(pat, ' ', line)      ## reduce all spaces to one

@@ -35,9 +35,9 @@ import shutil
 import time
 import logging
 import wave
-import transcriptprocessor
-import cmudictionary
-import praat
+from . import transcriptprocessor
+from . import cmudictionary
+from . import praat
 
 
 class Aligner():
@@ -55,20 +55,22 @@ class Aligner():
             trsfile,
             inputfile=None,
             tgfile=None,
-            dictionary_file=['model', 'dict'],
+            dictionary_file=['align','model', 'dict'],
             no_prompt=False,
             verbose=False,
             check=False,
             htktoolspath='HTKTOOLSPATH'
     ):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
         self.count_unclear = 0
         self.count_uncertain = 0
         self.count_words = 0
+
+        dictionary_file = os.path.join(*dictionary_file)
 
         self.audio = wavfile
         self.transcript = trsfile
@@ -86,12 +88,11 @@ class Aligner():
             'check': check
         }
         args = []
-        self.cmu_dict = cmudictionary.CMU_Dictionary(
-            os.path.join(dictionary_file), *args, **kwargs)
+        self.cmu_dict = cmudictionary.CMU_Dictionary(dictionary_file)
         if inputfile:
             self.cmu_dict.add_dictionary_entries(inputfile)
         self.transcript = transcriptprocessor.TranscriptProcesor(
-            trsfile, self.cmu_dict, *args, **kwargs)
+            trsfile, self.cmu_dict)
 
     def read_transcript(self):
         self.transcript.read_transcription_file()
@@ -100,7 +101,7 @@ class Aligner():
         self.transcript.check_transcription_file()
 
     def check_against_dictionary(self):
-        self.transcript.check_dictionary_entries()
+        self.transcript.check_dictionary_entries(self.audio)
 
     def get_duration(self, FADIR='', PRAATPATH=''):
         """gets the overall duration of a soundfile"""

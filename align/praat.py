@@ -15,7 +15,7 @@ class Formant:
 
     def __init__(self, name=None):
         self.logger = logging.getLogger(__name__)
-        self.logger.basicConfig(
+        logging.basicConfig(
             format='%(levelname)s:%(message)s',
             level=logging.DEBUG)
 
