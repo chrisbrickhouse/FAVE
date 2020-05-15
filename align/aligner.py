@@ -2,24 +2,26 @@
 # *_* coding: utf-8 *_*
 
 """
-FAAV force aligner
+Wrapper for FAAV force aligner library
 """
 
 __version__ = "2.0.0-dev"
-__author__ = ("Rosenfelder, Ingrid; "+ # Only code writers
-              "Fruehwald, Josef; "+
-              "Evanini, Keelan; "+
-              "Seyfarth, Scott; "+
-              "Gorman, Kyle; "+
-              "Prichard, Hilary; "+
-              "Yuan, Jiahong; "+
+__author__ = ("Rosenfelder, Ingrid; " +  # Only code writers
+              "Fruehwald, Josef; " +
+              "Evanini, Keelan; " +
+              "Seyfarth, Scott; " +
+              "Gorman, Kyle; " +
+              "Prichard, Hilary; " +
+              "Yuan, Jiahong; " +
               "Brickhouse, Christian")
 __email__ = "brickhouse@stanford.edu"
-__maintainer__ = "Christian Brickhouse"  # should be the person who will fix bugs and make improvements
+# should be the person who will fix bugs and make improvements
+__maintainer__ = "Christian Brickhouse"
 __copyright__ = "Copyright 2020, FAVE contributors"
 __license__ = "GPLv3"
 __status__ = "Development"  # Prototype, Development or Production
-__credits__ = ["Brandon Waldon"]  # also include contributors that wrote no code
+# also include contributors that wrote no code
+__credits__ = ["Brandon Waldon"]
 
 # --------------------------------------------------------------------------------
 
@@ -31,7 +33,6 @@ __credits__ = ["Brandon Waldon"]  # also include contributors that wrote no code
 import os  # replace with subprocess one day
 import re
 import subprocess
-import traceback
 import shutil
 import time
 import logging
@@ -56,12 +57,13 @@ class Aligner():
             trsfile,
             inputfile=None,
             tgfile=None,
-            dictionary_file=['align','model', 'dict'],
+            dictionary_file=None,
             no_prompt=False,
             verbose=False,
             check=False,
             htktoolspath=''
     ):
+        dictionary_file = dictionary_file or ['align', 'model', 'dict']
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
             format='%(levelname)s:%(message)s',
@@ -92,19 +94,22 @@ class Aligner():
             'check': check
         }
         args = []
-        self.cmu_dict = cmudictionary.CMU_Dictionary(dictionary_file)
+        self.cmu_dict = cmudictionary.CMU_Dictionary(dictionary_file, *args, **kwargs)
         if inputfile:
             self.cmu_dict.add_dictionary_entries(inputfile)
         self.transcript = transcriptprocessor.TranscriptProcesor(
             trsfile, self.cmu_dict)
 
     def read_transcript(self):
+        """Interface with TranscriptProcesor to read a file"""
         self.transcript.read_transcription_file()
 
     def check_transcript(self):
+        """Interface with TranscriptProcesor to check a file"""
         self.transcript.check_transcription_file()
 
     def check_against_dictionary(self):
+        """Interface with TranscriptProcesor to check dictionary entries"""
         self.transcript.check_dictionary_entries(self.audio)
 
     def get_duration(self, FADIR='', PRAATPATH=''):
@@ -136,20 +141,9 @@ class Aligner():
 
         return duration
 
-    def check_tempdir(self, tempdir):
-        """checks that the temporary directory for all alignment "chunks" is empty"""
-        # skip this, not useful in modular form
-        return
-
-        # (NOTE:  This is a modified version of make_tempdir)
-        # check whether directory already exists and has files in it
-        #if os.path.isdir(tempdir):
-        #    contents = os.listdir(tempdir)
-        #    if len(contents) != 0 and not options.noprompt:
-        #        self.logger.error("Directory %s is non-empty!" % tempdir)
-        #        raise ValueError("Directory non-empty")
-
     def align(self, tempdir='', FADIR=''):
+        """Main alignment function
+        """
         self.logger.info('Starting alignment')
         failed_alignment = []
         trans_lines = self.transcript.trans_lines
@@ -158,17 +152,18 @@ class Aligner():
         style_tier = None
         count_chunks = 0
         duration = self.get_duration()
-        SOXPATH=''
+        SOXPATH = ''
         main_textgrid = praat.TextGrid()
         if len(trans_lines) != len(all_input):
             raise ValueError('Remove empty lines from transcript')
 
         if FADIR:
-            tmpdir = os.path.join(FADIR,'tmp')
+            tmpdir = os.path.join(FADIR, 'tmp')
         else:
-            tmpdir = os.path.join('.','tmp')
+            tmpdir = os.path.join('.', 'tmp')
         if not os.path.isdir(tmpdir):
-            self.logger.info(f'No temporary directory, creating one at {tmpdir}')
+            self.logger.info(
+                f'No temporary directory, creating one at {tmpdir}')
             os.mkdir(tmpdir)
         # start alignment of breathgroups
         for (text, line) in zip(trans_lines, all_input):
@@ -182,7 +177,8 @@ class Aligner():
                 continue
 
             # normal tiers:
-            speaker = entries[1].strip().replace('/', ' ')  # eventually replace all \W!
+            speaker = entries[1].strip().replace(
+                '/', ' ')  # eventually replace all \W!
             # some people forget to enter the speaker name into the second
             # field, try the first one (speaker ID) instead
             if not speaker:
@@ -195,7 +191,8 @@ class Aligner():
             # Add logging here
             try:
                 if dur < 0.05:
-                    raise ValueError(f"Annotation unit too short ({dur} s), cannot align.")
+                    raise ValueError(
+                        f"Annotation unit too short ({dur} s), cannot align.")
             except ValueError:
                 continue
 
@@ -214,6 +211,7 @@ class Aligner():
             chunkname_textgrid = os.path.splitext(
                 chunkname_sound)[0] + ".TextGrid"
 
+            # Should add exception handling here
             # align chunk
             self.__align(
                 os.path.join(
@@ -226,25 +224,6 @@ class Aligner():
                 FADIR,
                 SOXPATH,
                 self.htktoolspath)
-            """
-            except Exception as e:
-                try:
-                    self.logger.error(
-                        "Alignment failed for chunk %i (speaker %s, text %s)." %
-                        (count_chunks, speaker, " ".join(text)))
-                    self.logger.error(e,traceback.print_tb(e.__traceback__))
-                except (UnicodeDecodeError, UnicodeEncodeError):
-                    self.logger.error(
-                        "Alignment failed for chunk %i (speaker %s, text %s)." %
-                        (count_chunks, speaker, " ".join(text).encode(
-                            'ascii', 'replace')))
-                failed_alignment.append([str(count_chunks), str(
-                    beg), str(end), speaker, " ".join(text)])
-                # remove temp files
-                os.remove(os.path.join(tempdir, chunkname_sound))
-                os.remove(os.path.join(tempdir, chunkname_textgrid))
-                continue
-            """
             # read TextGrid output of forced alignment
             new_textgrid = praat.TextGrid()
             new_textgrid.read(os.path.join(tempdir, chunkname_textgrid))
@@ -252,7 +231,7 @@ class Aligner():
             new_textgrid = self.__reinsert_uncertain(new_textgrid, text)
             # change time offset of chunk
             new_textgrid.change_offset(beg)
-            self.logger.debug("Offset changed by %s seconds." % beg)
+            self.logger.debug("Offset changed by {beg} seconds.")
 
             # add TextGrid for new chunk to main TextGrid
             main_textgrid = self.merge_textgrids(
@@ -267,9 +246,20 @@ class Aligner():
             self.count_unclear,
             count_chunks
         ]
-        self.__cleanup(style_tier, main_textgrid, failed_alignment, duration, counts)
+        self.__cleanup(
+            style_tier,
+            main_textgrid,
+            failed_alignment,
+            duration,
+            counts)
 
-    def __cleanup(self, style_tier, main_textgrid, failed_alignment, duration, counts):
+    def __cleanup(
+            self,
+            style_tier,
+            main_textgrid,
+            failed_alignment,
+            duration,
+            counts):
         # add style tier to main TextGrid, if applicable
         if style_tier:
             self.logger.debug('Added style tier back')
@@ -278,13 +268,14 @@ class Aligner():
         # tidy up main TextGrid (extend durations, insert empty intervals etc.)
         try:
             main_textgrid = self.__tidyup(main_textgrid, 0, duration)
-        except:
+        except BaseException: # pylint: disable=W0703
             self.logger.warning("Could not tidy the TextGrid output")
 
         # append information on alignment failure to errorlog file
         if failed_alignment:
             self.logger.warning('Some alignments failed')
-            self.__write_alignment_errors_to_log(self.textgrid, failed_alignment)
+            self.__write_alignment_errors_to_log(
+                self.textgrid, failed_alignment)
 
         # write main TextGrid to file
         try:
@@ -294,34 +285,34 @@ class Aligner():
             raise e
         else:
             self.logger.debug(
-                "Successfully written TextGrid %s to file." %
+                "Successfully written TextGrid %s to file.",
                 os.path.basename(self.textgrid))
 
         # remove temporary CMU dictionary
         try:
             os.remove(self.transcript.temp_dict_dir)
         except OSError as e:
-            self.logger.error(f'Could not remove temporary dictionary directory!')
+            self.logger.error(
+                'Could not remove temporary dictionary directory!')
             raise e
         else:
             self.logger.debug("Deleted temporary copy of the CMU dictionary.")
-
 
         wavfile = self.audio
         # write log file
         # This should be replaced by proper use of self.logger
         try:
-            t_stamp = self.__write_log(
+            self.__write_log(
                 os.path.splitext(wavfile)[0] +
                 ".FAAVlog",
                 wavfile,
                 duration,
                 counts)
-        except:
+        except BaseException: # pylint: disable=broad-except
             self.logger.error('Unable to write .FAAVlog')
         else:
             self.logger.debug(
-                "Written log file %s." %
+                "Written log file %s.",
                 os.path.basename(
                     os.path.splitext(wavfile)[0] +
                     ".FAAVlog"))
@@ -348,12 +339,10 @@ class Aligner():
             self.logger.debug(f"Cut command is:\n{command_cut_sound}")
             os.system(command_cut_sound)
             self.logger.debug(
-                "\tSound chunk %s successfully extracted." %
-                (outfile))  # os.path.basename(outfile)
+                f"Sound chunk {outfile} successfully extracted.")
         except Exception as e:
             self.logger.error(
-                "Error in extracting sound chunk %s:  %s." %
-                (os.path.basename(outfile), e))
+                f"Could not extract {outfile}!")
             raise e
 
     # This was the main body of Jiahong Yuan's original align.py
@@ -365,7 +354,8 @@ class Aligner():
         # outfile = output TextGrid
 
         self.logger.info(f"Aligning chunk {chunk}")
-        self.logger.info(f"input transcript: {trs_input}\noutput file: {outfile}")
+        self.logger.info(
+            f"input transcript: {trs_input}\noutput file: {outfile}")
 
         # change to Forced Alignment Toolkit directory for all the temp and
         # preparation files
@@ -373,7 +363,7 @@ class Aligner():
             self.logger.debug(f"Changing working directory to {FADIR}")
             os.chdir(FADIR)
 
-        self.logger.info("Current working directory is: "+os.getcwd())
+        self.logger.info("Current working directory is: %s", os.getcwd())
         # derive unique identifier for tmp directory and all its file (from
         # name of the sound "chunk")
         identifier = re.sub(
@@ -389,10 +379,11 @@ class Aligner():
         ## - "tmp.plp"
         ## - "tmp.wav"
 
-        tempdir = os.path.join('.','tmp',identifier)
-        tempwav = os.path.join('.','tmp',identifier,identifier+'.wav')
-        tempmlf = os.path.join('.','tmp',identifier,identifier+'.mlf')
-        tempalignedmlf = os.path.join('.','tmp',identifier,'aligned'+identifier+'.mlf')
+        tempdir = os.path.join('.', 'tmp', identifier)
+        tempwav = os.path.join('.', 'tmp', identifier, identifier + '.wav')
+        tempmlf = os.path.join('.', 'tmp', identifier, identifier + '.mlf')
+        tempalignedmlf = os.path.join(
+            '.', 'tmp', identifier, 'aligned' + identifier + '.mlf')
         self.logger.info(f"Creating directory {tempdir}")
         try:
             os.mkdir(tempdir)
@@ -415,50 +406,73 @@ class Aligner():
             identifier)
 
         # prepare scp files
-        tempscp = os.path.join('.','tmp',identifier, 'codetr'+identifier+'.scp')
-        testscp = os.path.join('.','tmp',identifier, 'test'+identifier+'.scp')
-        tempplp = os.path.join('.','tmp',identifier, 'tmp'+identifier+'.plp')
+        tempscp = os.path.join(
+            '.',
+            'tmp',
+            identifier,
+            'codetr' +
+            identifier +
+            '.scp')
+        testscp = os.path.join(
+            '.',
+            'tmp',
+            identifier,
+            'test' +
+            identifier +
+            '.scp')
+        tempplp = os.path.join(
+            '.',
+            'tmp',
+            identifier,
+            'tmp' +
+            identifier +
+            '.plp')
         with open(tempscp, 'w') as f:
             self.logger.debug(f"Writing {tempscp}")
-            f.write(tempwav+' '+tempplp+'\n')
+            f.write(tempwav + ' ' + tempplp + '\n')
         with open(testscp, 'w') as f:
             self.logger.debug(f"Writing {testscp}")
-            f.write(tempplp+'\n')
+            f.write(tempplp + '\n')
 
         try:
             # call plp.sh and align.sh
             self.logger.debug(f'Toolspath is "{HTKTOOLSPATH}"')
             if HTKTOOLSPATH:  # if absolute path to HTK Toolkit is given
-                HCopy = os.path.join(HTKTOOLSPATH,'HCopy')
-                HVite = os.path.join(HTKTOOLSPATH,'HVite')
+                HCopy = os.path.join(HTKTOOLSPATH, 'HCopy')
+                HVite = os.path.join(HTKTOOLSPATH, 'HVite')
             else:
                 HCopy = 'HCopy'
                 HVite = 'HVite'
             self.logger.debug(f'HCopy is "{HCopy}"')
             self.logger.debug(f'HVite is "{HVite}"')
-            modelconfig = os.path.join('.','align','model',str(SR),'config')
-            modelmacros = os.path.join('.','align','model',str(SR),'macros')
-            modelhmmdef = os.path.join('.','align','model',str(SR),'hmmdefs')
-            modelmonophones = os.path.join('.','align','model','monophones')
-            pipedest = os.path.join('.','tmp',identifier,'blubbeldiblubb.txt')
-            HCopyCommand = HCopy+' -T 1 -C '+modelconfig+' -S '+tempscp+' >> '+pipedest
+            modelconfig = os.path.join(
+                '.', 'align', 'model', str(SR), 'config')
+            modelmacros = os.path.join(
+                '.', 'align', 'model', str(SR), 'macros')
+            modelhmmdef = os.path.join(
+                '.', 'align', 'model', str(SR), 'hmmdefs')
+            modelmonophones = os.path.join('.', 'align', 'model', 'monophones')
+            pipedest = os.path.join(
+                '.', 'tmp', identifier, 'blubbeldiblubb.txt')
+            HCopyCommand = HCopy + ' -T 1 -C ' + modelconfig + \
+                ' -S ' + tempscp + ' >> ' + pipedest
             HViteCommand = (HVite +
-                ' -T 1 -a -m -I ' +
-                tempmlf +
-                ' -H ' +
-                modelmacros +
-                ' -H ' +
-                modelhmmdef +
-                ' -S ' +
-                testscp +
-                ' -i '+
-                tempalignedmlf +
-                ' -p 0.0 -s 5.0 ' +
-                self.cmu_dict.dict_dir +
-                ' ' +
-                modelmonophones +
-                ' > ' +
-                os.path.join(tempdir,identifier+'.results'))
+                            ' -T 1 -a -m -I ' +
+                            tempmlf +
+                            ' -H ' +
+                            modelmacros +
+                            ' -H ' +
+                            modelhmmdef +
+                            ' -S ' +
+                            testscp +
+                            ' -i ' +
+                            tempalignedmlf +
+                            ' -p 0.0 -s 5.0 ' +
+                            self.cmu_dict.dict_dir +
+                            ' ' +
+                            modelmonophones +
+                            ' > ' +
+                            os.path.join(tempdir, identifier + '.results'))
 
             self.logger.debug(f'HViteCommand is "{HViteCommand}"')
 
@@ -471,7 +485,7 @@ class Aligner():
                 outfile,
                 SR)
             self.logger.debug(
-                "Forced alignment called successfully for file %s." %
+                "Forced alignment called successfully for file %s",
                 os.path.basename(chunk))
         except Exception as e:
             FA_error = "Error in aligning file %s:  %s." % (
@@ -554,9 +568,7 @@ class Aligner():
                     self.count_words += 1
                 else:
                     self.logger.warning(
-                        "\tWarning!  Word %s not in CMU dict!!!" %
-                        word.encode(
-                            'ascii', 'replace'))
+                        f"Word '{word}' not in CMU dict!")
         fw.write('.\n')
         fw.close()
 
@@ -688,8 +700,6 @@ class Aligner():
         for (n, interval) in enumerate(tg[1]):  # word tier
             if interval.mark() not in ["sp", "SP"]:
                 tgwords.append((interval.mark(), n))
-    # print "\t\ttgwords:  ", tgwords
-    # print "\t\ttext:  ", text
 
         # for all "real" (non-"sp") words in transcription:
         for (n, entry) in enumerate(tgwords):
@@ -720,29 +730,32 @@ class Aligner():
                     tg[1][tgposition].change_text(text[n])
                 else:  # This should not happen!
                     raise ValueError(
-                        "Something went wrong in the substitution of unclear transcriptions for the forced alignment!")
+                        "Something went wrong in the substitution" +
+                        " of unclear transcriptions for the forced alignment!")
 
             # original transcription contains uncertain transcription:
             elif self.uncertain.search(text[n]):
                 # corresponding interval in TextGrid must have transcription
                 # without parentheses (and, if applicable, without asterisk)
-                if tgword == self.uncertain.sub(r'\1', text[n]).lstrip(
-                        '*') and tg[1][tgposition].mark() == self.uncertain.sub(r'\1', text[n]).lstrip('*'):
+                test = self.uncertain.sub(r'\1', text[n]).lstrip('*')
+                if tgword == test and tg[1][tgposition].mark() == test:
                     tg[1][tgposition].change_text(text[n])
                 else:  # This should not happen!
                     raise ValueError(
-                        "Something went wrong in the substitution of uncertain transcriptions for the forced alignment!")
+                        "Something went wrong in the substitution" +
+                        " of uncertain transcriptions for the forced alignment!")
 
             # original transcription was asterisked word
             elif text[n][0] == "*":
                 # corresponding interval in TextGrid must have transcription
                 # without the asterisk
-                if tgword == text[n].lstrip(
-                        '*') and tg[1][tgposition].mark() == text[n].lstrip('*'):
+                test = text[n].lstrip('*')
+                if tgword == test and tg[1][tgposition].mark() == test:
                     tg[1][tgposition].change_text(text[n])
                 else:  # This should not happen!
                     raise ValueError(
-                        "Something went wrong in the substitution of asterisked transcriptions for the forced alignment!")
+                        "Something went wrong in the substitution of " +
+                        " asterisked transcriptions for the forced alignment!")
 
         return tg
 
@@ -755,21 +768,15 @@ class Aligner():
             # (output of FA program is "phone", "word" -> "Speaker - phone", "Speaker - word")
             tier.rename(speaker + " - " + tier.name())
             # check if tier already exists:
-            exists = False
             for existing_tier in main_textgrid:
                 if tier.name() == existing_tier.name():
-                    exists = True
-                    break  # need this so existing_tier retains its value!!!
-            if exists:
-                for interval in tier:
-                    existing_tier.append(interval)
+                    for interval in tier:
+                        existing_tier.append(interval)
+                    break
             else:
                 main_textgrid.append(tier)
         self.logger.debug(
-            "Successfully added " +
-            chunkname_textgrid +
-            " to main TextGrid.")
-
+            f"Successfully added {chunkname_textgrid} to main TextGrid.")
         return main_textgrid
 
     def process_style_tier(self, entries, style_tier=None):
@@ -782,12 +789,7 @@ class Aligner():
         beg = round(float(entries[2]), 3)
         end = round(float(entries[3]), 3)
         text = entries[4].strip().upper()
-        # check that entry on style tier has one of the allowed values
-    # if text in STYLE_ENTRIES:
         style_tier.append(praat.Interval(beg, end, text))
-    # else:
-    ##        error = "ERROR!  Invalid entry on style tier:  %s (interval %.2f - %.2f)" % (text, beg, end)
-    # errorhandler(error)
 
         return style_tier
 
@@ -807,12 +809,12 @@ class Aligner():
             "Alignment statistics for file %s:\n\n" %
             os.path.basename(wavfile))
 
-        version = __version__
+        #version = __version__
 
         try:
             check_changes = subprocess.Popen(
                 ["git", "diff", "--stat"], stdout=subprocess.PIPE)
-            changes, err = check_changes.communicate()
+            changes, err = check_changes.communicate() # pylint: disable=unused-variable
         except OSError:
             changes = ''
 
@@ -832,6 +834,7 @@ class Aligner():
         f.write("Duration of sound file:\t\t\t%.3f seconds\n" % duration)
         # The following is timing data that should be reinserted but is not
         #   critical to port right now.
+        # pylint: disable=pointless-string-statement
         """
         f.write("Total time for alignment:\t\t%.2f seconds\n" %
                 (times[-1][2] - times[1][2]))
@@ -860,8 +863,6 @@ class Aligner():
         """
         f.close()
 
-        return t_stamp
-
     def __write_alignment_errors_to_log(self, tgfile, failed_alignment):
         """appends the list of alignment failures to the error log"""
 
@@ -885,7 +886,7 @@ class Aligner():
     #            errorlog.write('\t'.join(f))
             errorlog.write('\n')
         errorlog.close()
-        self.logger.info("Alignment errors saved to file %s." % logname)
+        self.logger.info(f"Alignment errors saved to file {logname}")
 
     def __tidyup(self, tg, beg, end):
         """extends the duration of a TextGrid and all its tiers from beg to end;
@@ -904,7 +905,7 @@ class Aligner():
             if len(oops) != 0:
                 for oo in oops:
                     overlaps.append(oo)
-            self.logger.debug("Finished tidying up %s." % t)
+            self.logger.debug(f"Finished tidying up {t}")
         # write errorlog if overlapping intervals detected
         if len(overlaps) != 0:
             self.logger.warning("Overlapping intervals detected!")
@@ -925,4 +926,4 @@ class Aligner():
                 "Interval %s and interval %s on tier %s.\n" %
                 (o[0], o[1], o[2]))
         errorlog.close()
-        self.logger.info("Error messages saved to file %s." % logname)
+        self.logger.info(f"Error messages saved to file {logname}")
