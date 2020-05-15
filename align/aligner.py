@@ -31,6 +31,7 @@ __credits__ = ["Brandon Waldon"]  # also include contributors that wrote no code
 import os  # replace with subprocess one day
 import re
 import subprocess
+import traceback
 import shutil
 import time
 import logging
@@ -59,7 +60,7 @@ class Aligner():
             no_prompt=False,
             verbose=False,
             check=False,
-            htktoolspath='HTKTOOLSPATH'
+            htktoolspath=''
     ):
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
@@ -81,7 +82,10 @@ class Aligner():
         self.verbose = verbose
         self.prompt = not no_prompt
         self.check = check
-        self.htktoolspath = htktoolspath
+        if not htktoolspath and 'HTKTOOLSPATH' in os.environ:
+            self.htktoolspath = '$HTKTOOLSPATH'
+        else:
+            self.htktoolspath = htktoolspath
         kwargs = {
             'verbose': verbose,
             'prompt': not no_prompt,
@@ -146,6 +150,7 @@ class Aligner():
         #        raise ValueError("Directory non-empty")
 
     def align(self, tempdir='', FADIR=''):
+        self.logger.info('Starting alignment')
         failed_alignment = []
         trans_lines = self.transcript.trans_lines
         all_input = self.transcript.lines
@@ -154,8 +159,17 @@ class Aligner():
         count_chunks = 0
         duration = self.get_duration()
         SOXPATH=''
+        main_textgrid = praat.TextGrid()
         if len(trans_lines) != len(all_input):
             raise ValueError('Remove empty lines from transcript')
+
+        if FADIR:
+            tmpdir = os.path.join(FADIR,'tmp')
+        else:
+            tmpdir = os.path.join('.','tmp')
+        if not os.path.isdir(tmpdir):
+            self.logger.info(f'No temporary directory, creating one at {tmpdir}')
+            os.mkdir(tmpdir)
         # start alignment of breathgroups
         for (text, line) in zip(trans_lines, all_input):
             entries = line.strip().split('\t')
@@ -168,9 +182,7 @@ class Aligner():
                 continue
 
             # normal tiers:
-            speaker = entries[1].strip().encode(
-                'ascii', 'ignore').replace(
-                    '/', ' ')  # eventually replace all \W!
+            speaker = entries[1].strip().replace('/', ' ')  # eventually replace all \W!
             # some people forget to enter the speaker name into the second
             # field, try the first one (speaker ID) instead
             if not speaker:
@@ -183,9 +195,7 @@ class Aligner():
             # Add logging here
             try:
                 if dur < 0.05:
-                    raise ValueError(
-                        "WARNING!  Annotation unit too short (%s s) - no alignment possible." %
-                        dur)
+                    raise ValueError(f"Annotation unit too short ({dur} s), cannot align.")
             except ValueError:
                 continue
 
@@ -200,27 +210,29 @@ class Aligner():
                 dur,
                 SOXPATH)
             # generate name for output TextGrid
+            self.logger.debug("Creating chunk textgrid")
             chunkname_textgrid = os.path.splitext(
                 chunkname_sound)[0] + ".TextGrid"
 
             # align chunk
-            try:
-                self.__align(
-                    os.path.join(
-                        tempdir,
-                        chunkname_sound),
-                    [text],
-                    os.path.join(
-                        tempdir,
-                        chunkname_textgrid),
-                    FADIR,
-                    SOXPATH,
-                    self.htktoolspath)
+            self.__align(
+                os.path.join(
+                    tempdir,
+                    chunkname_sound),
+                [text],
+                os.path.join(
+                    tempdir,
+                    chunkname_textgrid),
+                FADIR,
+                SOXPATH,
+                self.htktoolspath)
+            """
             except Exception as e:
                 try:
                     self.logger.error(
                         "Alignment failed for chunk %i (speaker %s, text %s)." %
                         (count_chunks, speaker, " ".join(text)))
+                    self.logger.error(e,traceback.print_tb(e.__traceback__))
                 except (UnicodeDecodeError, UnicodeEncodeError):
                     self.logger.error(
                         "Alignment failed for chunk %i (speaker %s, text %s)." %
@@ -232,7 +244,7 @@ class Aligner():
                 os.remove(os.path.join(tempdir, chunkname_sound))
                 os.remove(os.path.join(tempdir, chunkname_textgrid))
                 continue
-
+            """
             # read TextGrid output of forced alignment
             new_textgrid = praat.TextGrid()
             new_textgrid.read(os.path.join(tempdir, chunkname_textgrid))
@@ -260,49 +272,63 @@ class Aligner():
     def __cleanup(self, style_tier, main_textgrid, failed_alignment, duration, counts):
         # add style tier to main TextGrid, if applicable
         if style_tier:
+            self.logger.debug('Added style tier back')
             main_textgrid.append(style_tier)
 
         # tidy up main TextGrid (extend durations, insert empty intervals etc.)
-        main_textgrid = self.__tidyup(main_textgrid, 0, duration)
+        try:
+            main_textgrid = self.__tidyup(main_textgrid, 0, duration)
+        except:
+            self.logger.warning("Could not tidy the TextGrid output")
 
         # append information on alignment failure to errorlog file
         if failed_alignment:
+            self.logger.warning('Some alignments failed')
             self.__write_alignment_errors_to_log(self.textgrid, failed_alignment)
 
         # write main TextGrid to file
-        main_textgrid.write(self.textgrid)
-        self.logger.debug(
-            "Successfully written TextGrid %s to file." %
-            os.path.basename(self.textgrid))
-
-        # delete temporary transcription files and "chunk" sound file/temp directory
-        # remove_tempdir(tempdir)
-        # empty_tempdir(tempdir)
-        # os.remove("blubbeldiblubb.txt")
-        # NOTE:  no longer needed because sound chunks and corresponding
-        # TextGrids are cleaned up in the loop
-        # also, might delete sound chunks from other processes running in
-        # parallel!!!
+        try:
+            main_textgrid.write(self.textgrid)
+        except OSError as e:
+            self.logger.error('Could not write TextGrid!')
+            raise e
+        else:
+            self.logger.debug(
+                "Successfully written TextGrid %s to file." %
+                os.path.basename(self.textgrid))
 
         # remove temporary CMU dictionary
-        os.remove(self.transcript.temp_dict_dir)
-        self.logger.debug("Deleted temporary copy of the CMU dictionary.")
+        try:
+            os.remove(self.transcript.temp_dict_dir)
+        except OSError as e:
+            self.logger.error(f'Could not remove temporary dictionary directory!')
+            raise e
+        else:
+            self.logger.debug("Deleted temporary copy of the CMU dictionary.")
+
+
         wavfile = self.audio
         # write log file
-        t_stamp = self.__write_log(
-            os.path.splitext(wavfile)[0] +
-            ".FAAVlog",
-            wavfile,
-            duration,
-            counts)
-        self.logger.debug(
-            "Written log file %s." %
-            os.path.basename(
+        # This should be replaced by proper use of self.logger
+        try:
+            t_stamp = self.__write_log(
                 os.path.splitext(wavfile)[0] +
-                ".FAAVlog"))
+                ".FAAVlog",
+                wavfile,
+                duration,
+                counts)
+        except:
+            self.logger.error('Unable to write .FAAVlog')
+        else:
+            self.logger.debug(
+                "Written log file %s." %
+                os.path.basename(
+                    os.path.splitext(wavfile)[0] +
+                    ".FAAVlog"))
 
     def __cut_chunk(self, outfile, start, dur, SOXPATH):
         """uses SoX to cut a portion out of a sound file"""
+        self.logger.debug(f"Cutting chunk {outfile} from {start}s to {dur}s")
         wavfile = self.audio
         if SOXPATH:
             command_cut_sound = " ".join([SOXPATH,
@@ -319,6 +345,7 @@ class Aligner():
                                           str(start),
                                           str(dur)])
         try:
+            self.logger.debug(f"Cut command is:\n{command_cut_sound}")
             os.system(command_cut_sound)
             self.logger.debug(
                 "\tSound chunk %s successfully extracted." %
@@ -337,11 +364,16 @@ class Aligner():
         # trsfile = corresponding transcription file
         # outfile = output TextGrid
 
+        self.logger.info(f"Aligning chunk {chunk}")
+        self.logger.info(f"input transcript: {trs_input}\noutput file: {outfile}")
+
         # change to Forced Alignment Toolkit directory for all the temp and
         # preparation files
         if FADIR:
+            self.logger.debug(f"Changing working directory to {FADIR}")
             os.chdir(FADIR)
 
+        self.logger.info("Current working directory is: "+os.getcwd())
         # derive unique identifier for tmp directory and all its file (from
         # name of the sound "chunk")
         identifier = re.sub(
@@ -357,131 +389,85 @@ class Aligner():
         ## - "tmp.plp"
         ## - "tmp.wav"
 
+        tempdir = os.path.join('.','tmp',identifier)
+        tempwav = os.path.join('.','tmp',identifier,identifier+'.wav')
+        tempmlf = os.path.join('.','tmp',identifier,identifier+'.mlf')
+        tempalignedmlf = os.path.join('.','tmp',identifier,'aligned'+identifier+'.mlf')
+        self.logger.info(f"Creating directory {tempdir}")
+        try:
+            os.mkdir(tempdir)
+        except FileExistsError:
+            self.logger.warning("Directory already exists? Reusing")
+        except OSError as e:
+            self.logger.critical("Could not create directory!")
+            raise e
         # create working directory
-        os.mkdir("./tmp" + identifier)
         # prepare wavefile
         SR = self.__prep_wav(
             chunk,
-            './tmp' +
-            identifier +
-            '/tmp' +
-            identifier +
-            '.wav',
+            tempwav,
             SOXPATH)
 
         # prepare mlfile
         self.__prep_mlf(
             trs_input,
-            './tmp' +
-            identifier +
-            '/tmp' +
-            identifier +
-            '.mlf',
+            tempmlf,
             identifier)
 
         # prepare scp files
-        fw = open('./tmp' + identifier + '/codetr' + identifier + '.scp', 'w')
-        fw.write(
-            './tmp' +
-            identifier +
-            '/tmp' +
-            identifier +
-            '.wav ./tmp' +
-            identifier +
-            '/tmp' +
-            identifier +
-            '.plp\n')
-        fw.close()
-        fw = open('./tmp' + identifier + '/test' + identifier + '.scp', 'w')
-        fw.write('./tmp' + identifier + '/tmp' + identifier + '.plp\n')
-        fw.close()
+        tempscp = os.path.join('.','tmp',identifier, 'codetr'+identifier+'.scp')
+        testscp = os.path.join('.','tmp',identifier, 'test'+identifier+'.scp')
+        tempplp = os.path.join('.','tmp',identifier, 'tmp'+identifier+'.plp')
+        with open(tempscp, 'w') as f:
+            self.logger.debug(f"Writing {tempscp}")
+            f.write(tempwav+' '+tempplp+'\n')
+        with open(testscp, 'w') as f:
+            self.logger.debug(f"Writing {testscp}")
+            f.write(tempplp+'\n')
 
         try:
             # call plp.sh and align.sh
+            self.logger.debug(f'Toolspath is "{HTKTOOLSPATH}"')
             if HTKTOOLSPATH:  # if absolute path to HTK Toolkit is given
-                os.system(
-                    os.path.join(
-                        HTKTOOLSPATH,
-                        'HCopy') +
-                    ' -T 1 -C ./model/' +
-                    str(SR) +
-                    '/config -S ./tmp' +
-                    identifier +
-                    '/codetr' +
-                    identifier +
-                    '.scp >> ./tmp' +
-                    identifier +
-                    '/blubbeldiblubb.txt')
-                os.system(
-                    os.path.join(
-                        HTKTOOLSPATH,
-                        'HVite') +
-                    ' -T 1 -a -m -I ./tmp' +
-                    identifier +
-                    '/tmp' +
-                    identifier +
-                    '.mlf -H ./model/' +
-                    str(SR) +
-                    '/macros -H ./model/' +
-                    str(SR) +
-                    '/hmmdefs  -S ./tmp' +
-                    identifier +
-                    '/test' +
-                    identifier +
-                    '.scp -i ./tmp' +
-                    identifier +
-                    '/aligned' +
-                    identifier +
-                    '.mlf -p 0.0 -s 5.0 ' +
-                    self.cmu_dict.dict_dir +
-                    ' ./model/monophones > ./tmp' +
-                    identifier +
-                    '/aligned' +
-                    identifier +
-                    '.results')
-            else:  # find path via shell
-                os.system(
-                    'HCopy -T 1 -C ./model/' +
-                    str(SR) +
-                    '/config -S ./tmp' +
-                    identifier +
-                    '/codetr' +
-                    identifier +
-                    '.scp >> ./tmp' +
-                    identifier +
-                    '/blubbeldiblubb.txt')
-                os.system(
-                    'HVite -T 1 -a -m -I ./tmp' +
-                    identifier +
-                    '/tmp' +
-                    identifier +
-                    '.mlf -H ./model/' +
-                    str(SR) +
-                    '/macros -H ./model/' +
-                    str(SR) +
-                    '/hmmdefs  -S ./tmp' +
-                    identifier +
-                    '/test' +
-                    identifier +
-                    '.scp -i ./tmp' +
-                    identifier +
-                    '/aligned' +
-                    identifier +
-                    '.mlf -p 0.0 -s 5.0 ' +
-                    self.cmu_dict.dict_dir +
-                    ' ./model/monophones > ./tmp' +
-                    identifier +
-                    '/aligned' +
-                    identifier +
-                    '.results')
+                HCopy = os.path.join(HTKTOOLSPATH,'HCopy')
+                HVite = os.path.join(HTKTOOLSPATH,'HVite')
+            else:
+                HCopy = 'HCopy'
+                HVite = 'HVite'
+            self.logger.debug(f'HCopy is "{HCopy}"')
+            self.logger.debug(f'HVite is "{HVite}"')
+            modelconfig = os.path.join('.','align','model',str(SR),'config')
+            modelmacros = os.path.join('.','align','model',str(SR),'macros')
+            modelhmmdef = os.path.join('.','align','model',str(SR),'hmmdefs')
+            modelmonophones = os.path.join('.','align','model','monophones')
+            pipedest = os.path.join('.','tmp',identifier,'blubbeldiblubb.txt')
+            HCopyCommand = HCopy+' -T 1 -C '+modelconfig+' -S '+tempscp+' >> '+pipedest
+            HViteCommand = (HVite +
+                ' -T 1 -a -m -I ' +
+                tempmlf +
+                ' -H ' +
+                modelmacros +
+                ' -H ' +
+                modelhmmdef +
+                ' -S ' +
+                testscp +
+                ' -i '+
+                tempalignedmlf +
+                ' -p 0.0 -s 5.0 ' +
+                self.cmu_dict.dict_dir +
+                ' ' +
+                modelmonophones +
+                ' > ' +
+                os.path.join(tempdir,identifier+'.results'))
+
+            self.logger.debug(f'HViteCommand is "{HViteCommand}"')
+
+            os.system(HCopyCommand)
+            os.system(HViteCommand)
 
             # write result of alignment to TextGrid file
             self.__aligned_to_TextGrid(
-                './tmp' +
-                identifier +
-                '/aligned' +
-                identifier +
-                '.mlf',
+                tempalignedmlf,
                 outfile,
                 SR)
             self.logger.debug(
@@ -491,13 +477,14 @@ class Aligner():
             FA_error = "Error in aligning file %s:  %s." % (
                 os.path.basename(chunk), e)
             # clean up temporary alignment files
-            shutil.rmtree("./tmp" + identifier)
+            shutil.rmtree(tempdir)
             self.logger.error(FA_error)
             raise e
             # errorhandler(FA_error)
 
         # remove tmp directory and all files
-        shutil.rmtree("./tmp" + identifier)
+        # This may create a race condition
+        shutil.rmtree(tempdir)
 
     # This function is from Jiahong Yuan's align.py
     # (but adapted so that we're forcing a SR of 16,000 Hz; mono)
@@ -820,30 +807,14 @@ class Aligner():
             "Alignment statistics for file %s:\n\n" %
             os.path.basename(wavfile))
 
-        try:
-            check_version = subprocess.Popen(
-                ["git", "describe", "--tags"], stdout=subprocess.PIPE)
-            version, err = check_version.communicate()
-            version = version.rstrip()
-        except OSError:
-            version = None
-
-        if version:
-            f.write("version info from Git: %s" % version)
-            f.write("\n")
-        else:
-            f.write("Not using Git version control. Version info unavailable.\n")
-            f.write("Consider installing Git (http://git-scm.com/).\
-             and cloning this repository from GitHub with: \n \
-             git clone git@github.com:JoFrhwld/FAVE.git")
-            f.write("\n")
+        version = __version__
 
         try:
             check_changes = subprocess.Popen(
                 ["git", "diff", "--stat"], stdout=subprocess.PIPE)
             changes, err = check_changes.communicate()
         except OSError:
-            changes = None
+            changes = ''
 
         if changes:
             f.write("Uncommitted changes when run:\n")
