@@ -129,12 +129,14 @@ class Aligner():
             f.close()
             duration = round((nx / sr), 3)
         except wave.Error:  # wave.py does not seem to support 32-bit .wav files???
+			self.logger.debug('Script path is %s',os.path.join(
+				FADIR, "praatScripts", "get_duration.praat"))
             if PRAATPATH:
                 dur_command = "%s %s %s" % (PRAATPATH, os.path.join(
-                    FADIR, "get_duration.praat"), self.audio)
+                    FADIR, "praatScripts", "get_duration.praat"), self.audio)
             else:
                 dur_command = "praat %s %s" % (os.path.join(
-                    FADIR, "get_duration.praat"), self.audio)
+                    FADIR, "praatScripts", "get_duration.praat"), self.audio)
             duration = round(
                 float(
                     subprocess.Popen(
