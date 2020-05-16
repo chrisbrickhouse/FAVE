@@ -38,16 +38,17 @@ import shutil
 import time
 import logging
 import wave
+import pkg_resources
 from . import transcriptprocessor
-from . import cmudictionary
+from fave import cmudictionary
 from . import praat
 
 
 class Aligner():
     """
-	The Aligner class is the main user entry point to the FAVE library. It
-	handles the interface between all the different modules and automates
-	the process in a way that allows easy use in scripts or larger programs.
+    The Aligner class is the main user entry point to the FAVE library. It
+    handles the interface between all the different modules and automates
+    the process in a way that allows easy use in scripts or larger programs.
     """
     # pylint: disable=too-many-instance-attributes
     # Code debt: most of the instance attributes should be passed to functions
@@ -59,50 +60,49 @@ class Aligner():
             self,
             wavfile,
             trsfile,
-            inputfile=None,
-            tgfile=None,
-            dictionary_file=None,
-            no_prompt=False,
-            verbose=False,
-            check=False,
-            htktoolspath=''
+            tgfile,
+            **kwargs
     ):
-        dictionary_file = dictionary_file or ['align', 'model', 'dict']
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
-            format='%(levelname)s:%(message)s',
-            level=logging.DEBUG)
+            format='%(name)s - %(levelname)s:%(message)s',
+            level=kwargs['verbose'])
 
         self.count_unclear = 0
         self.count_uncertain = 0
         self.count_words = 0
-
-        dictionary_file = os.path.join(*dictionary_file)
-
         self.audio = wavfile
-        self.transcript = trsfile
+        default_dict = pkg_resources.resource_filename('align', 'model/dict')
+        if trsfile:
+            self.transcript = trsfile
+        else:
+            self.transcript = os.path.splitext(wavfile)[0] + '.txt'
         if tgfile:
             self.textgrid = tgfile
         else:
             self.textgrid = os.path.splitext(trsfile)[0] + '.TextGrid'
-        self.verbose = verbose
-        self.prompt = not no_prompt
-        self.check = check
-        if not htktoolspath and 'HTKTOOLSPATH' in os.environ:
-            self.htktoolspath = '$HTKTOOLSPATH'
-        else:
-            self.htktoolspath = htktoolspath
-        kwargs = {
-            'verbose': verbose,
-            'prompt': not no_prompt,
-            'check': check
-        }
+
+        self.__config(**kwargs)
+
+        dictionary_file = kwargs['dict'] or default_dict
+
+        kwargs['prompt'] = False
         args = []
+
         self.cmu_dict = cmudictionary.CMU_Dictionary(dictionary_file, *args, **kwargs)
-        if inputfile:
-            self.cmu_dict.add_dictionary_entries(inputfile)
+
+        if kwargs['import']:
+            self.cmu_dict.add_dictionary_entries(kwargs['import'])
+
         self.transcript = transcriptprocessor.TranscriptProcesor(
-            trsfile, self.cmu_dict)
+            self.transcript,
+            self.cmu_dict,
+            *args,
+            **kwargs)
+
+    def __config(self,**kwargs):
+        self.htktoolspath = kwargs['htktoolspath']
+        self.check = kwargs['check']
 
     def read_transcript(self):
         """Interface with TranscriptProcesor to read a file"""
@@ -129,8 +129,8 @@ class Aligner():
             f.close()
             duration = round((nx / sr), 3)
         except wave.Error:  # wave.py does not seem to support 32-bit .wav files???
-			self.logger.debug('Script path is %s',os.path.join(
-				FADIR, "praatScripts", "get_duration.praat"))
+            self.logger.debug('Script path is %s',os.path.join(
+                FADIR, "praatScripts", "get_duration.praat"))
             if PRAATPATH:
                 dur_command = "%s %s %s" % (PRAATPATH, os.path.join(
                     FADIR, "praatScripts", "get_duration.praat"), self.audio)
@@ -360,8 +360,8 @@ class Aligner():
         # outfile = output TextGrid
 
         self.logger.info(f"Aligning chunk {chunk}")
-        self.logger.info(
-            f"input transcript: {trs_input}\noutput file: {outfile}")
+        self.logger.debug(f"input transcript: {trs_input}")
+        self.logger.debug(f"output file: {outfile}")
 
         # change to Forced Alignment Toolkit directory for all the temp and
         # preparation files
@@ -369,7 +369,7 @@ class Aligner():
             self.logger.debug(f"Changing working directory to {FADIR}")
             os.chdir(FADIR)
 
-        self.logger.info("Current working directory is: %s", os.getcwd())
+        self.logger.debug("Current working directory is: %s", os.getcwd())
         # derive unique identifier for tmp directory and all its file (from
         # name of the sound "chunk")
         identifier = re.sub(

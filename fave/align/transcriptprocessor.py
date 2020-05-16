@@ -34,7 +34,7 @@ import re
 import sys
 import os
 import logging
-from . import cmudictionary
+from fave import cmudictionary
 
 
 class TranscriptProcesor():
@@ -66,7 +66,7 @@ class TranscriptProcesor():
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
             format='%(levelname)s:%(message)s',
-            level=logging.DEBUG)
+            level=kwargs['verbose'])
 
         self.file = transript_file
         self.__config_flags(**kwargs)
@@ -86,21 +86,10 @@ class TranscriptProcesor():
         self.dictionary = pronunciation_dictionary
 
     def __config_flags(self, **kwargs):
-        self.verbose = False
-        self.prompt = False
-        self.check = False
-        try:
-            self.verbose = kwargs['verbose']
-        except KeyError:
-            pass
-        try:
-            self.prompt = kwargs['prompt']
-        except KeyError:
-            pass
-        try:
-            self.check = kwargs['check']
-        except KeyError:
-            pass
+        self.prompt = kwargs['prompt']
+        if kwargs['check']:
+            self.unknownFile = kwargs['check']
+        self.check = bool(kwargs['check'])
 
     def check_dictionary_entries(self, wavfile):
         """checks that all words in lines have an entry in the CMU dictionary;
@@ -155,8 +144,7 @@ class TranscriptProcesor():
                         :2]) + "_" + "dict")
             self.logger.debug(f"temp_dict is {temp_dict}")
             self.dictionary.write_dict(temp_dict)
-            if self.verbose:
-                self.logger.debug(
+            self.logger.debug(
                     "Written updated temporary version of CMU dictionary.")
             # forced alignment must use updated cmudict, not original one
             self.temp_dict_dir = temp_dict
@@ -165,10 +153,10 @@ class TranscriptProcesor():
         # write list of unknown words and suggested transcriptions for
         # truncated words to file
         if self.check:
-            self.dictionary.write_unknown_words(unknown)
+            self.dictionary.write_unknown_words(unknown,self.unknownFile)
             self.logger.info(
                 "Written list of unknown words in transcription to file %s.",
-                self.check)
+                self.unknownFile)
             if __name__ == "__main__":
                 sys.exit()  # It shouldn't just die, but return and clean up after itself
 
@@ -182,8 +170,8 @@ class TranscriptProcesor():
         # INPUT:  string line = line of orthographic transcription
         # OUTPUT:  list words = list of individual words in transcription
 
-        self.logger.info("Preprocessing transcript line")
-        self.logger.debug(line)
+        self.logger.debug("Preprocessing transcript line:")
+        self.logger.debug(f"    {line}")
         flag_uncertain = self.flag_uncertain
         last_beg_uncertain = self.last_beg_uncertain
         last_end_uncertain = self.last_end_uncertain

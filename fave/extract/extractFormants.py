@@ -71,7 +71,7 @@ import time
 import praat
 import esps
 import plotnik
-import cmu
+from fave import cmudictionary as cmu
 import vowel
 import subprocess
 
